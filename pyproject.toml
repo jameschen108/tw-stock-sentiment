@@ -1,0 +1,9 @@
+[project]
+name = "pttsent"
+version = "0.1.0"
+description = "PTT 情緒與台股走勢分析"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

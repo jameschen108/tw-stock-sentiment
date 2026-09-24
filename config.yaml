@@ -1,0 +1,44 @@
+# 共用原始資料（唯讀，本專案不會寫入）；可用環境變數 PTT_DATA_DIR 覆寫
+data_dir: /Users/jameschen/Project/data
+work_dir: data        # 中間產物（已 gitignore）
+output_dir: output    # 表格與圖（已 gitignore）
+
+ptt_years: [2019, 2020, 2021, 2022, 2023, 2024]
+
+# 分析標的。別名用來判斷文章／留言是否在討論這檔股票；
+# 沒列在這裡的股票會自動用 universe_267.csv 的簡稱
+ticker: "2330"
+aliases:
+  "2330": [台積電, 台積, TSMC, 護國神山]   # 「GG」也常指台積電，但和「GG了」撞義，預設不收
+  "2317": [鴻海, 海公公]
+  "2603": [長榮]
+
+# 時間對齊：收盤（13:30）之後的貼文算到下一個交易日
+cutoff: "13:30"
+# 預測目標：close_to_close = 明天收盤相對今天收盤；open_to_close = 明天開盤到收盤
+target: close_to_close
+
+sentiment:
+  method: lexicon            # lexicon | classifier
+  classifier_path: data/models/sentiment_clf.joblib
+  account_weighting: true    # 同一帳號當天先平均再跨帳號平均，避免洗版帳號主導
+  max_comment_lag_days: 30   # 留言晚於文章超過這麼多天，視為時間戳可疑而排除
+
+split:
+  start: 2019-01-01
+  end: 2024-12-31                # PTT 資料只到 2024 年底
+  final_test_start: 2024-01-01   # 最終測試期：開發時不碰，全部定案後才用 --final 跑一次
+  min_train_days: 250
+  refit_every: 21                # 每 21 個交易日（約一個月）重新訓練
+
+costs:
+  fee_rate: 0.001425
+  fee_discount: 1.0              # 券商手續費折扣，例如 0.28 = 2.8 折
+  tax_rate: 0.003                # 賣出證交稅（現股）
+
+llm:
+  model: claude-opus-5           # 想省錢可改 claude-haiku-4-5，並把 effort 設成 null
+  effort: low
+  fallbacks: true                # 被安全機制拒答時由伺服器改用其他模型；只在 sync 模式、claude-opus-5 有效
+  n_samples: 2000
+  seed: 42
