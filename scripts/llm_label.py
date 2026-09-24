@@ -47,6 +47,7 @@ def main():
         res = L.label_sync(cfg, sample.head(a.n), ticker, name)
         res.to_parquet(work_path(cfg, "llm", f"sync_{ticker}.parquet"), index=False)
         print(L.label_counts(res))
+        print("usage:", L.usage_summary(res))
         for _, r in res.iterrows():
             print(f"[{r.get('label')}{' 反諷' if r.get('sarcasm') is True else ''}] "
                   f"{r['text'][:60]!r}  <- {r.get('evidence')!r}")
@@ -63,6 +64,7 @@ def main():
         out = work_path(cfg, "llm", f"labels_{ticker}.parquet")
         res.to_parquet(out, index=False)
         print(L.label_counts(res))
+        print("usage:", L.usage_summary(res, batch=True))
         print(f"-> {out}")
 
 

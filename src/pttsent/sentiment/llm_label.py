@@ -38,6 +38,14 @@ SCHEMA = {
     "additionalProperties": False,
 }
 
+# 每百萬 token 的（輸入, 輸出）美元；快取寫入 1.25 倍、讀取 0.1 倍，Batches API 再打五折
+PRICES = {
+    "claude-opus-5": (5.0, 25.0),
+    "claude-opus-4-8": (5.0, 25.0),
+    "claude-sonnet-5": (2.0, 10.0),
+    "claude-haiku-4-5": (1.0, 5.0),
+}
+
 
 def sample_texts(texts: pd.DataFrame, n: int, seed: int) -> pd.DataFrame:
     """依年度平均抽樣，留言約七成、文章約三成；去掉太短與重複的文字。"""
@@ -72,16 +80,27 @@ def request_params(cfg, row, ticker, name) -> dict:
     }
 
 
+def _usage(msg) -> dict:
+    """msg.model 是實際回答的模型（被拒答改用備援模型時會不同）。"""
+    u = msg.usage
+    return {"model_used": msg.model,
+            "input_tokens": u.input_tokens,
+            "output_tokens": u.output_tokens,
+            "cache_write_tokens": u.cache_creation_input_tokens or 0,
+            "cache_read_tokens": u.cache_read_input_tokens or 0}
+
+
 def _parse_message(msg) -> dict:
+    usage = _usage(msg)
     if msg.stop_reason == "refusal":
-        return {"status": "refusal"}
+        return {"status": "refusal", **usage}
     if msg.stop_reason == "max_tokens":
-        return {"status": "max_tokens"}
+        return {"status": "max_tokens", **usage}
     text = next((b.text for b in msg.content if b.type == "text"), "")
     try:
-        return {"status": "ok", **json.loads(text)}
+        return {"status": "ok", **usage, **json.loads(text)}
     except json.JSONDecodeError:
-        return {"status": "bad_json"}
+        return {"status": "bad_json", **usage}
 
 
 def submit_batch(cfg, sample: pd.DataFrame, ticker, name) -> str:
@@ -147,3 +166,22 @@ def label_counts(labeled: pd.DataFrame) -> dict:
             "label": labeled.get("label", pd.Series(dtype=str)).value_counts().to_dict(),
             "sarcasm_rate": float(np.nanmean(labeled.get("sarcasm", pd.Series([np.nan]))
                                              .astype(float)))}
+
+
+def usage_summary(labeled: pd.DataFrame, batch: bool = False) -> dict:
+    """加總 token 並依 PRICES 估算美元；不在價目表裡的模型不計入 usd。"""
+    cols = ["input_tokens", "output_tokens", "cache_write_tokens", "cache_read_tokens"]
+    if "model_used" not in labeled:
+        return {}
+    df = labeled.dropna(subset=["model_used"])
+    price = df["model_used"].map(PRICES)
+    known = price.notna()
+    inp = price[known].str[0] / 1e6
+    out = price[known].str[1] / 1e6
+    d = df[known]
+    usd = (d["input_tokens"] * inp + d["cache_write_tokens"] * inp * 1.25
+           + d["cache_read_tokens"] * inp * 0.1 + d["output_tokens"] * out).sum()
+    return {**{c: int(df[c].sum()) for c in cols},
+            "models": df["model_used"].value_counts().to_dict(),
+            "usd": round(float(usd) * (0.5 if batch else 1.0), 4),
+            "unpriced_models": sorted(set(df.loc[~known, "model_used"]))}
