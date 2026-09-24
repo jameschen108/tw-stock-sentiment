@@ -12,29 +12,51 @@ import pandas as pd
 
 LABELS = ["bullish", "bearish", "neutral", "irrelevant"]
 
-SYSTEM = """你是台灣股市社群文本的標註員。判斷一段 PTT Stock 板文字的作者，對「目標股票」未來股價的看法。
+SYSTEM = """你是台灣股市社群文本的標註員。判斷一段 PTT Stock 板文字的作者，對「目標股票」未來股價有沒有自己的看法、看法是什麼。
 
 標籤：
-- bullish：作者認為會漲、表達買進或續抱的意圖
-- bearish：作者認為會跌、表達賣出、停損或放空的意圖
-- neutral：有提到目標股票，但沒有方向，或多空並陳沒有結論
-- irrelevant：與目標股票無關，或只是轉貼新聞、數據而沒有自己的看法
+- bullish：作者自己認為目標股票會漲，或表達買進、加碼、續抱的意圖
+- bearish：作者自己認為目標股票會跌，或表達賣出、停損、放空的意圖
+- neutral：作者認真討論目標股票的前景（基本面、評價、籌碼、產業），但沒有方向，或多空並陳沒有結論
+- irrelevant：沒有對目標股票未來股價的可用看法，包括：
+  - 與目標股票無關
+  - 只轉貼新聞、數據，沒有自己的評論
+  - 幹話：玩梗、開玩笑、政治酸、酸別人或酸時事、炫耀或抱怨自己的損益、題外閒聊、單純發問
+
+判斷順序：
+1. 作者有沒有「自己」對目標股票未來走勢的看法？沒有 → irrelevant。
+2. 有看法且有方向 → bullish / bearish。
+3. 有認真討論但沒有方向或沒有結論 → neutral。
+neutral 不是拿不準時的預設值。在 neutral 和 irrelevant 之間猶豫時，問自己：這段話能不能幫人判斷這檔股票接下來會漲還是跌、或提供了認真的分析？不能就標 irrelevant。
+反過來，留言再短，只要作者對目標股票的基本面、需求、客戶、競爭對手、評價、股利或影響股價的因素提出自己的判斷，就算沒有方向也是 neutral，不是 irrelevant。
 
 規則：
 - 只根據文字本身判斷，不要使用你對這段期間實際行情的任何知識。
-- 描述今天已經發生的漲跌（例如「今天又跌了」）不等於預測，除非作者接著表達未來方向。
-- 注意 PTT 反串與反諷：「笑死 又要噴了」可能是嘲諷。sarcasm 標 true，label 依作者真正的意思。
-- 嘲諷別人的看法，不代表作者持相反立場；看不出作者自己的方向就標 neutral。
-- evidence 請逐字引用支持判斷的原文片段（20 字以內），irrelevant 時留空字串。"""
+- 描述或抱怨已經發生、正在發生的漲跌或買賣（例如「今天又跌了」「外資就是要殺」「今天那麼弱外資當然賣」）不等於預測，標 irrelevant；作者接著說出未來方向（例如「還會再殺一波」）才標 bullish/bearish。
+- sarcasm：PTT 常反串、反諷，例如「笑死 又要噴了」可能是嘲諷。是反諷就標 true，label 依作者真正的意思。
+- 只有看得出「作者自己」的方向時才標 bullish/bearish。只是在嘲諷別人、名人、政府或時事，看不出作者自己的方向 → irrelevant；不要從被嘲諷的對象反推作者立場。
+- 例外：拿公認的反指標開玩笑，而且明顯表示作者要反著做（例如「某某大師都喊買了，快逃」），可以標方向。
+- banter：這段文字主要是幹話（上面列的類型）就標 true。幹話通常是 irrelevant；幹話裡若確實帶著作者自己的方向，可以標 bullish/bearish，banter 仍標 true。
+- 文章若有「心得/評論」段，以作者的心得為準，不要拿新聞內文當作者的看法。
+- evidence 請逐字引用支持判斷的原文片段（20 字以內），irrelevant 時留空字串。
+
+示意（非本次資料）：
+- 「這價位不買還等什麼，明天加碼」→ bullish
+- 「毛利率指引下修，先出一半」→ bearish
+- 「本益比在歷史區間中間，接下來看 AI 訂單能不能延續」→ neutral
+- 「早知道十年前 all in，現在就不用上班了」→ irrelevant，banter
+- 「某名嘴又要出來喊千元了，笑死」→ irrelevant，banter，sarcasm
+- 「請問除息是哪天」→ irrelevant"""
 
 SCHEMA = {
     "type": "object",
     "properties": {
         "label": {"type": "string", "enum": LABELS},
         "sarcasm": {"type": "boolean"},
+        "banter": {"type": "boolean"},
         "evidence": {"type": "string"},
     },
-    "required": ["label", "sarcasm", "evidence"],
+    "required": ["label", "sarcasm", "banter", "evidence"],
     "additionalProperties": False,
 }
 
@@ -103,12 +125,20 @@ def _parse_message(msg) -> dict:
         return {"status": "bad_json", **usage}
 
 
-def submit_batch(cfg, sample: pd.DataFrame, ticker, name) -> str:
+def _client():
+    """.env 可設 ANTHROPIC_WORKSPACE_ID：API key 沒綁 workspace 時，請求要帶這個 header。"""
+    import os
+
     import anthropic
+    ws = os.environ.get("ANTHROPIC_WORKSPACE_ID")
+    return anthropic.Anthropic(default_headers={"anthropic-workspace-id": ws} if ws else None)
+
+
+def submit_batch(cfg, sample: pd.DataFrame, ticker, name) -> str:
     from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
     from anthropic.types.messages.batch_create_params import Request
 
-    client = anthropic.Anthropic()
+    client = _client()
     reqs = [Request(custom_id=r["custom_id"],
                     params=MessageCreateParamsNonStreaming(**request_params(cfg, r, ticker, name)))
             for _, r in sample.iterrows()]
@@ -117,13 +147,11 @@ def submit_batch(cfg, sample: pd.DataFrame, ticker, name) -> str:
 
 
 def batch_status(batch_id: str):
-    import anthropic
-    return anthropic.Anthropic().messages.batches.retrieve(batch_id)
+    return _client().messages.batches.retrieve(batch_id)
 
 
 def collect_batch(batch_id: str, sample: pd.DataFrame) -> pd.DataFrame:
-    import anthropic
-    client = anthropic.Anthropic()
+    client = _client()
     rows = []
     for res in client.messages.batches.results(batch_id):
         if res.result.type == "succeeded":
@@ -136,7 +164,7 @@ def collect_batch(batch_id: str, sample: pd.DataFrame) -> pd.DataFrame:
 def label_sync(cfg, sample: pd.DataFrame, ticker, name) -> pd.DataFrame:
     """逐則呼叫，用來小量試跑。claude-opus-5 預設開啟伺服器端 fallback（被安全機制拒答時自動改用其他模型）。"""
     import anthropic
-    client = anthropic.Anthropic()
+    client = _client()
     rows = []
     for _, r in sample.iterrows():
         params = request_params(cfg, r, ticker, name)
@@ -164,8 +192,8 @@ def to_training(labeled: pd.DataFrame) -> pd.DataFrame:
 def label_counts(labeled: pd.DataFrame) -> dict:
     return {"status": labeled["status"].value_counts().to_dict(),
             "label": labeled.get("label", pd.Series(dtype=str)).value_counts().to_dict(),
-            "sarcasm_rate": float(np.nanmean(labeled.get("sarcasm", pd.Series([np.nan]))
-                                             .astype(float)))}
+            **{f"{c}_rate": float(np.nanmean(labeled.get(c, pd.Series([np.nan])).astype(float)))
+               for c in ("sarcasm", "banter")}}
 
 
 def usage_summary(labeled: pd.DataFrame, batch: bool = False) -> dict:

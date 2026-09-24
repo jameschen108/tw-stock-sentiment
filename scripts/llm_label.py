@@ -49,7 +49,7 @@ def main():
         print(L.label_counts(res))
         print("usage:", L.usage_summary(res))
         for _, r in res.iterrows():
-            print(f"[{r.get('label')}{' 反諷' if r.get('sarcasm') is True else ''}] "
+            print(f"[{r.get('label')}{' 反諷' if r.get('sarcasm') is True else ''}{' 幹話' if r.get('banter') is True else ''}] "
                   f"{r['text'][:60]!r}  <- {r.get('evidence')!r}")
     elif a.cmd == "submit":
         batch_id = L.submit_batch(cfg, sample, ticker, name)

@@ -7,7 +7,23 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def load_env(path=None) -> None:
+    """讀專案根目錄的 .env（KEY=VALUE 一行一個），已存在的環境變數優先。"""
+    path = Path(path or ROOT / ".env")
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        value = value.strip().strip("'\"")
+        if value:
+            os.environ.setdefault(key.strip(), value)
+
+
 def load_config(path=None) -> dict:
+    load_env()
     path = Path(path or os.environ.get("PTTSENT_CONFIG", ROOT / "config.yaml"))
     cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
     cfg["data_dir"] = Path(os.environ.get("PTT_DATA_DIR", cfg["data_dir"]))
