@@ -16,7 +16,7 @@ pd.set_option("display.max_columns", 20)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from pttsent import plots  # noqa: E402
 from pttsent.backtest import backtest, summary, trade_costs  # noqa: E402
-from pttsent.config import load_config, output_path, work_path  # noqa: E402
+from pttsent.config import METHODS, load_config, output_path, work_path  # noqa: E402
 from pttsent.features import period  # noqa: E402
 from pttsent.models import auc_diff_ci, metrics, run_all  # noqa: E402
 
@@ -24,7 +24,7 @@ from pttsent.models import auc_diff_ci, metrics, run_all  # noqa: E402
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ticker")
-    ap.add_argument("--method", choices=["lexicon", "classifier"])
+    ap.add_argument("--method", choices=METHODS)
     ap.add_argument("--final", action="store_true")
     a = ap.parse_args()
     cfg = load_config()

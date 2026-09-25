@@ -1,6 +1,6 @@
 """步驟 3：把每則情緒彙整成每日特徵，並接上量價與預測目標。
 
-    python scripts/03_build_features.py [--method lexicon|classifier]
+    python scripts/03_build_features.py [--method lexicon|classifier_weak|classifier_llm]
 """
 import argparse
 import sys
@@ -9,7 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from pttsent.config import load_config, work_path  # noqa: E402
+from pttsent.config import METHODS, load_config, work_path  # noqa: E402
 from pttsent.features import build_daily, daily_sentiment  # noqa: E402
 from pttsent.prices import load_stock, load_taiex  # noqa: E402
 
@@ -17,7 +17,7 @@ from pttsent.prices import load_stock, load_taiex  # noqa: E402
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ticker")
-    ap.add_argument("--method", choices=["lexicon", "classifier"])
+    ap.add_argument("--method", choices=METHODS)
     a = ap.parse_args()
     cfg = load_config()
     ticker = a.ticker or str(cfg["ticker"])

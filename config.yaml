@@ -19,8 +19,8 @@ cutoff: "13:30"
 target: close_to_close
 
 sentiment:
-  method: lexicon            # lexicon | classifier
-  classifier_path: data/models/sentiment_clf.joblib
+  method: lexicon            # lexicon | classifier_weak | classifier_llm
+  classifier_dir: data/models  # 模型存成 sentiment_clf_{weak | llm_代號}.joblib，旁邊附同名 .json 訓練紀錄
   account_weighting: true    # 同一帳號當天先平均再跨帳號平均，避免洗版帳號主導
   max_comment_lag_days: 30   # 留言晚於文章超過這麼多天，視為時間戳可疑而排除
 

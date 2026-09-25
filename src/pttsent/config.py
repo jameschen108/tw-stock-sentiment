@@ -5,6 +5,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
+METHODS = ["lexicon", "classifier_weak", "classifier_llm"]
 
 
 def load_env(path=None) -> None:
@@ -30,9 +31,15 @@ def load_config(path=None) -> dict:
     for key in ("work_dir", "output_dir"):
         p = Path(cfg[key])
         cfg[key] = p if p.is_absolute() else ROOT / p
-    p = Path(cfg["sentiment"]["classifier_path"])
-    cfg["sentiment"]["classifier_path"] = p if p.is_absolute() else ROOT / p
+    p = Path(cfg["sentiment"]["classifier_dir"])
+    cfg["sentiment"]["classifier_dir"] = p if p.is_absolute() else ROOT / p
     return cfg
+
+
+def classifier_path(cfg, labels: str, ticker: str) -> Path:
+    """弱標籤不分股票，共用一個模型；LLM 標籤是針對某檔股票標的，每檔各一個。"""
+    name = "sentiment_clf_weak" if labels == "weak" else f"sentiment_clf_llm_{ticker}"
+    return cfg["sentiment"]["classifier_dir"] / f"{name}.joblib"
 
 
 def work_path(cfg, *parts) -> Path:

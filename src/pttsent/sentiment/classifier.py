@@ -2,10 +2,16 @@
 
 訓練資料可以是 [標的] 弱標籤，或 LLM 標註（見 llm_label.py）。
 分數 = P(看多) - P(看空)；若判定為 irrelevant 則為 NaN。
+模型存成 .joblib，旁邊的同名 .json 記錄標籤來源、訓練期間、測試成績與 scikit-learn 版本。
 """
+import json
+import warnings
+from datetime import datetime
+
 import joblib
 import numpy as np
 import pandas as pd
+import sklearn
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report
@@ -28,9 +34,10 @@ def split_by_time(df: pd.DataFrame, test_frac: float = 0.2):
 
 
 def train(df: pd.DataFrame, test_frac: float = 0.2):
+    """回傳（用全部資料重訓的模型, 時間切分測試集上的 classification_report dict）。"""
     tr, te = split_by_time(df, test_frac)
     model = build_pipeline().fit(tr["text"], tr["label"])
-    report = classification_report(te["label"], model.predict(te["text"]), digits=3)
+    report = classification_report(te["label"], model.predict(te["text"]), output_dict=True)
     model = build_pipeline().fit(df["text"], df["label"])   # 報告完再用全部資料重訓
     return model, report
 
@@ -46,10 +53,28 @@ def score(model, texts) -> np.ndarray:
     return s
 
 
-def save(model, path):
+def save(model, path, meta: dict):
     path.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, path)
+    meta = {**meta, "sklearn_version": sklearn.__version__,
+            "trained_at": datetime.now().isoformat(timespec="seconds")}
+    path.with_suffix(".json").write_text(json.dumps(meta, ensure_ascii=False, indent=2, default=str),
+                                         encoding="utf-8")
+
+
+def load_meta(path) -> dict:
+    p = path.with_suffix(".json")
+    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
 
 
 def load(path):
+    """只讀自己訓練的檔：joblib 讀檔時會執行檔案裡的程式碼。"""
+    if not path.exists():
+        raise FileNotFoundError(f"{path} 不存在，先跑 scripts/train_classifier.py")
+    trained_with = load_meta(path).get("sklearn_version")
+    if trained_with is None:
+        warnings.warn(f"{path.name} 沒有訓練紀錄（.json），不確定是用什麼資料訓練的")
+    elif trained_with != sklearn.__version__:
+        warnings.warn(f"{path.name} 是用 scikit-learn {trained_with} 訓練的，"
+                      f"目前是 {sklearn.__version__}，結果可能不同；建議重訓")
     return joblib.load(path)
