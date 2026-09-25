@@ -71,8 +71,11 @@ def load_stock(data_dir, ticker) -> pd.DataFrame:
     df["oc"] = np.log(df["close"] / df["open"])
     df["gap"] = np.log(df["open"] / base)
 
+    # 超過漲跌幅限制的報酬不可能是真的，多半是減資恢復交易（例如 2603 在 2022-09-19），
+    # 手邊沒有減資參考價，只好設成缺值，不然一天就會扭曲相關係數和回測
     jumps = df.index[np.abs(np.expm1(df["ret"])) > 0.105]
     if len(jumps):
-        warnings.warn(f"{ticker} 有 {len(jumps)} 天報酬超過漲跌幅限制（可能是減資或資料錯誤）："
+        df.loc[jumps, ["ret", "gap"]] = np.nan
+        warnings.warn(f"{ticker} 有 {len(jumps)} 天報酬超過漲跌幅限制（可能是減資或資料錯誤），已設為缺值："
                       f"{[d.date().isoformat() for d in jumps[:5]]}")
     return df
