@@ -5,7 +5,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-METHODS = ["lexicon", "classifier_weak", "classifier_llm", "classifier_llm_pooled"]
+METHODS = ["lexicon", "classifier_weak", "classifier_llm", "classifier_llm_pooled", "classifier_bert"]
 TARGETS = ["close_to_close", "open_to_close"]
 
 
@@ -50,6 +50,11 @@ def classifier_path(cfg, labels: str, ticker: str) -> Path:
     else:
         name = f"sentiment_clf_llm_{ticker}"
     return cfg["sentiment"]["classifier_dir"] / f"{name}.joblib"
+
+
+def bert_path(cfg) -> Path:
+    """BERT 分類器（合併標籤）是一個資料夾：模型權重、詞表與 training.json。"""
+    return cfg["sentiment"]["classifier_dir"] / "sentiment_bert_llm_pooled"
 
 
 def work_path(cfg, *parts) -> Path:

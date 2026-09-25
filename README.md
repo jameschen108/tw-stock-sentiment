@@ -35,7 +35,7 @@ python scripts/05_predict.py          # 滾動式預測＋回測
 python -m pytest                      # 測試（時間對齊、不偷看未來、成本計算）
 ```
 
-步驟 2–5 都可加 `--ticker`、`--method`（`lexicon` / `classifier_weak` / `classifier_llm` / `classifier_llm_pooled`）；
+步驟 2–5 都可加 `--ticker`、`--method`（`lexicon` / `classifier_weak` / `classifier_llm` / `classifier_llm_pooled` / `classifier_bert`）；
 步驟 3–5 可加 `--target open_to_close` 改成預測隔天開盤到收盤，結果存在 `*_oc` 資料夾，不會蓋掉原本的。
 `scripts/06_prereg_test.py` 是預先登記的最終檢定（見 [PREREGISTRATION.md](PREREGISTRATION.md)）。
 
@@ -125,7 +125,8 @@ PTT 原始資料 ──> 挑出討論 2330 的文字 ──> 每則情緒分數 
 合併的分類器在上面 macro-F1 0.440（留言 0.421），和 2603 差不多。這批花了 US$3.50（每則約 US$0.007）：
 小批次時 1 小時快取幾乎沒命中，每則都付了一次快取寫入（輸入價的 2 倍）。
 
-**BERT**（`src/pttsent/sentiment/bert.py`，需要 torch、transformers）：微調 `ckiplab/bert-base-chinese`，
+**BERT**（`train_classifier.py --labels llm_pooled --model bert`，步驟 2–5 用 `--method classifier_bert`；
+需要 torch、transformers，在 M2 上訓練約 30 分鐘、打分每秒約 300 則）：微調 `ckiplab/bert-base-chinese`，
 留言把所在文章的標題當第一段輸入，長文保留開頭 64 個 token 加結尾（最長 256），epoch 用訓練集最後 10% 挑。
 在上面同一個測試集（1,181 則）和合併的 TF-IDF 比：
 
@@ -136,9 +137,17 @@ PTT 原始資料 ──> 挑出討論 2330 的文字 ──> 每則情緒分數 
 
 差距 +0.056（bootstrap 95% CI [+0.017, +0.096]），2330、2603 都有進步。第一版只取開頭 128 個 token 時沒有贏（0.472），
 文章的心得段被截掉了；第二版的改法是看了第一版在測試集上的表現才決定的，所以提升可能略為樂觀，
-2317 的 500 則可以當沒看過的測試集。BERT 還沒接進步驟 2–5。
+所以另外在沒參與任何訓練與調整的 2317（500 則）上驗證：
 
-訓練好的模型存在 `data/models/`：弱標籤是 `sentiment_clf_weak.joblib`，LLM 標籤每檔股票各一個 `sentiment_clf_llm_{代號}.joblib`，合併訓練的是 `sentiment_clf_llm_pooled.joblib`。
+| 2317 | macro-F1 | 看空 | 看多 | 中性 | 無關 | 留言 macro-F1 | 多空判反 |
+|---|---|---|---|---|---|---|---|
+| TF-IDF（合併） | 0.440 | 0.324 | 0.473 | 0.159 | 0.803 | 0.421 | 12 / 119 |
+| BERT | **0.519** | 0.369 | 0.576 | 0.362 | 0.769 | 0.456 | 19 / 119 |
+
+差距 +0.079（95% CI [+0.024, +0.139]），提升站得住。但 BERT 比較敢判方向（看空 recall 0.28 → 0.44，precision 約 0.31），
+多空判反反而變多；分數是 P(看多) − P(看空)，判反的傷害最大，所以每日情緒不一定跟著變準。
+
+訓練好的模型存在 `data/models/`：弱標籤是 `sentiment_clf_weak.joblib`，LLM 標籤每檔股票各一個 `sentiment_clf_llm_{代號}.joblib`，合併訓練的是 `sentiment_clf_llm_pooled.joblib`，BERT 是資料夾 `sentiment_bert_llm_pooled/`（訓練紀錄在裡面的 `training.json`）。
 旁邊同名的 `.json` 記錄標籤來源、訓練期間、測試成績和 scikit-learn 版本。讀模型時若版本不同會警告，請重訓。
 
 ## 結果

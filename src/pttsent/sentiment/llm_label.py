@@ -191,8 +191,9 @@ def label_sync(cfg, sample: pd.DataFrame, ticker, name) -> pd.DataFrame:
 
 
 def to_training(labeled: pd.DataFrame) -> pd.DataFrame:
+    """kind、title 是給 BERT 用的（留言以所在文章的標題當上下文）；TF-IDF 只看 text。"""
     ok = labeled[labeled["status"] == "ok"]
-    return ok[["time", "text", "label"]].assign(label=lambda d: d["label"].astype(str))
+    return ok[["time", "text", "label", "kind", "title"]].assign(label=lambda d: d["label"].astype(str))
 
 
 def label_counts(labeled: pd.DataFrame) -> dict:

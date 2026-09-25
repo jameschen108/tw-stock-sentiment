@@ -47,4 +47,5 @@ llm:
   n_samples: 4000
   # train_classifier.py --labels llm_pooled 合併這些股票的標籤；2317 的標籤只當測試集，不放進來
   pool_tickers: ["2330", "2603"]
+  test_tickers: ["2317"]   # 這些股票的標籤只拿來測試合併訓練的分類器
   seed: 42

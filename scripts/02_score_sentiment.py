@@ -4,6 +4,7 @@
     python scripts/02_score_sentiment.py --method classifier_weak  # 需先跑 train_classifier.py --labels weak
     python scripts/02_score_sentiment.py --method classifier_llm   # 需先跑 train_classifier.py --labels llm
     python scripts/02_score_sentiment.py --method classifier_llm_pooled  # 需先跑 train_classifier.py --labels llm_pooled
+    python scripts/02_score_sentiment.py --method classifier_bert  # 需先跑 train_classifier.py --labels llm_pooled --model bert
 """
 import argparse
 import sys
@@ -13,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from pttsent.config import METHODS, classifier_path, load_config, work_path  # noqa: E402
+from pttsent.config import METHODS, bert_path, classifier_path, load_config, work_path  # noqa: E402
 from pttsent.sentiment import classifier, lexicon  # noqa: E402
 
 
@@ -29,6 +30,13 @@ def main():
     texts = pd.read_parquet(work_path(cfg, "interim", f"texts_{ticker}.parquet"))
     if method == "lexicon":
         texts["score"] = lexicon.score_texts(texts["text"])
+    elif method == "classifier_bert":
+        from pttsent.sentiment import bert
+        path = bert_path(cfg)
+        model, tokenizer = bert.load(path)
+        meta = bert.load_meta(path)
+        print(f"BERT {path.name}（{meta.get('n_labels')} 則標籤，訓練於 {meta.get('trained_at')}）")
+        texts["score"] = bert.score(model, tokenizer, texts["text"], bert.titles_of(texts))
     else:
         path = classifier_path(cfg, method.removeprefix("classifier_"), ticker)
         model = classifier.load(path)

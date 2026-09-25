@@ -91,7 +91,7 @@ def predict(model, tokenizer, texts, titles=None, **kw) -> np.ndarray:
     return np.array(LABELS)[predict_proba(model, tokenizer, texts, titles, **kw).argmax(axis=1)]
 
 
-def _titles(df):
+def titles_of(df):
     """只有留言用標題當上下文；文章的 text 本身已經包含標題。"""
     return df["title"].where(df["kind"] == "comment") if "title" in df else None
 
@@ -116,7 +116,7 @@ def fine_tune(train: pd.DataFrame, valid: pd.DataFrame | None = None, epochs: in
         BASE_MODEL, num_labels=len(LABELS), id2label=dict(enumerate(LABELS)),
         label2id={l: i for i, l in enumerate(LABELS)}).to(dev)
 
-    enc = encode(tokenizer, train["text"], _titles(train))
+    enc = encode(tokenizer, train["text"], titles_of(train))
     y = torch.tensor(train["label"].map(LABELS.index).to_numpy())
     counts = np.bincount(y.numpy(), minlength=len(LABELS))
     weight = torch.tensor(len(y) / (len(LABELS) * np.maximum(counts, 1)), dtype=torch.float32).to(dev)
@@ -141,7 +141,7 @@ def fine_tune(train: pd.DataFrame, valid: pd.DataFrame | None = None, epochs: in
             total += loss.item() * len(idx)
         msg = f"epoch {ep}  train loss {total / len(y):.4f}"
         if valid is not None:
-            f1 = f1_score(valid["label"], predict(model, tokenizer, valid["text"], _titles(valid)),
+            f1 = f1_score(valid["label"], predict(model, tokenizer, valid["text"], titles_of(valid)),
                           labels=LABELS, average="macro")
             history.append(f1)
             msg += f"  valid macro-F1 {f1:.3f}"
@@ -177,7 +177,7 @@ def save(model, tokenizer, path: Path, meta: dict):
 def load(path: Path):
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
     if not path.exists():
-        raise FileNotFoundError(f"{path} 不存在，先跑 scripts/train_classifier.py --model bert")
+        raise FileNotFoundError(f"{path} 不存在，先跑 scripts/train_classifier.py --labels llm_pooled --model bert")
     model = AutoModelForSequenceClassification.from_pretrained(path).to(device())
     return model, AutoTokenizer.from_pretrained(path)
 
