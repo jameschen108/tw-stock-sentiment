@@ -2,7 +2,7 @@
 
     python scripts/train_classifier.py --labels weak   # [標的] 文的「分類：多／空」弱標籤，不花錢
     python scripts/train_classifier.py --labels llm    # scripts/llm_label.py collect 產生的標籤
-    python scripts/train_classifier.py --labels llm_pooled   # data/llm/ 裡所有股票的 LLM 標籤合併訓練一個
+    python scripts/train_classifier.py --labels llm_pooled   # config 的 llm.pool_tickers 合併訓練一個
 
 最終測試期（config 的 split.final_test_start 之後）的文字一律排除。
 模型存到 data/models/sentiment_clf_{weak | llm_代號 | llm_pooled}.joblib，同名 .json 是訓練紀錄。
@@ -62,9 +62,8 @@ def main():
     elif a.labels == "llm":
         ds = to_training(pd.read_parquet(work_path(cfg, "llm", f"labels_{ticker}.parquet")))
     else:
-        files = sorted(work_path(cfg, "llm", "x").parent.glob("labels_*.parquet"))
-        ds = pd.concat([to_training(pd.read_parquet(f)).assign(ticker=f.stem.removeprefix("labels_"))
-                        for f in files], ignore_index=True)
+        ds = pd.concat([to_training(pd.read_parquet(work_path(cfg, "llm", f"labels_{t}.parquet"))).assign(ticker=t)
+                        for t in cfg["llm"]["pool_tickers"]], ignore_index=True)
     # 最終測試期的文字不進訓練，也不拿來看測試成績，否則開發時就先看過 2024 了
     final_start = pd.Timestamp(cfg["split"]["final_test_start"])
     n_all = len(ds)

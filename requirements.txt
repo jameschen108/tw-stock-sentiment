@@ -10,3 +10,6 @@ joblib
 pytest
 # 選用：LLM 標註（scripts/llm_label.py）
 # anthropic
+# 選用：BERT 分類器（src/pttsent/sentiment/bert.py），第一次使用會從 Hugging Face 下載約 400 MB 的模型
+# torch
+# transformers

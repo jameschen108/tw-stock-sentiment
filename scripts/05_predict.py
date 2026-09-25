@@ -42,9 +42,10 @@ def main():
         probs = probs[probs.index >= pd.Timestamp(cfg["split"]["final_test_start"])]
     probs.to_csv(out("predictions.csv"))
     y = df.loc[probs.index, "up_next"]
+    ret_next = df.loc[probs.index, "ret_next"]
     print(f"樣本外評估期 {probs.index.min().date()} .. {probs.index.max().date()}（{len(probs)} 天）\n")
 
-    table = pd.DataFrame({m: metrics(y, probs[m]) for m in probs.columns}).T
+    table = pd.DataFrame({m: metrics(y, probs[m], ret_next) for m in probs.columns}).T
     table.to_csv(out("metrics.csv"))
     print(table.round(4), "\n")
 
@@ -54,19 +55,16 @@ def main():
     print("各年準確率")
     print(by_year.round(3), "\n")
 
-    ci = {}
-    for kind in ("logit", "gbm"):
-        pt, lo, hi = auc_diff_ci(y, probs[f"A_price_{kind}"], probs[f"B_price_sent_{kind}"])
-        ci[kind] = {"auc_diff": pt, "ci_low": lo, "ci_high": hi}
-        print(f"{kind}: AUC(量價+情緒) - AUC(只用量價) = {pt:+.4f}  95% CI [{lo:+.4f}, {hi:+.4f}]")
+    pt, lo, hi = auc_diff_ci(y, probs["A_price_logit"], probs["B_price_sent_logit"])
+    ci = {"logit": {"auc_diff": pt, "ci_low": lo, "ci_high": hi}}
+    print(f"logit: AUC(量價+情緒) - AUC(只用量價) = {pt:+.4f}  95% CI [{lo:+.4f}, {hi:+.4f}]")
     json.dump(ci, open(out("auc_diff.json"), "w"), indent=2)
 
     daytrade = bool(suffix)   # open_to_close：每個持有日都是開盤買、收盤賣
     buy, sell = trade_costs(cfg, daytrade)
-    ret_next = df.loc[probs.index, "ret_next"]
     curves, rows = {}, {}
     strategies = {"買進持有": pd.Series(1.0, index=probs.index)}
-    for m in ["A_price_logit", "B_price_sent_logit", "A_price_gbm", "B_price_sent_gbm"]:
+    for m in ["A_price_logit", "B_price_sent_logit"]:
         strategies[m] = (probs[m] > 0.5).astype(float)
     if daytrade:   # 放空當沖：開盤先賣、收盤買回
         strategies["放空_每天"] = pd.Series(-1.0, index=probs.index)

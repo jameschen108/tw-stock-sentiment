@@ -45,4 +45,6 @@ llm:
   effort: medium             # Opus 5 上 low 在模糊案例（幹話、反諷）不穩定，medium 較一致；Opus 5.5 的預設也是 medium
   fallbacks: true                # 被安全機制拒答時由伺服器改用其他模型；只在 sync 模式有效（Batches API 不支援）
   n_samples: 4000
+  # train_classifier.py --labels llm_pooled 合併這些股票的標籤；2317 的標籤只當測試集，不放進來
+  pool_tickers: ["2330", "2603"]
   seed: 42

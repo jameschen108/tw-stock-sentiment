@@ -6,8 +6,8 @@
 """
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
+from scipy.stats import spearmanr
 from sklearn.metrics import accuracy_score, brier_score_loss, roc_auc_score
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
@@ -18,11 +18,10 @@ FEATURE_SETS = {"A_price": PRICE_FEATURES, "B_price_sent": PRICE_FEATURES + SENT
 
 
 def make_model(kind: str):
+    """C=0.01：C=0.1 時三檔股票的 Brier 都比「過去上漲比例」這個常數差，等於在擬合雜訊。
+    梯度提升樹拿掉了：同樣的資料上 Brier 約 0.27，過擬合更嚴重。"""
     if kind == "logit":
-        return make_pipeline(StandardScaler(), LogisticRegression(C=0.1, max_iter=2000))
-    if kind == "gbm":
-        return HistGradientBoostingClassifier(max_depth=3, learning_rate=0.05, max_iter=200,
-                                              l2_regularization=1.0, random_state=0)
+        return make_pipeline(StandardScaler(), LogisticRegression(C=0.01, max_iter=2000))
     raise ValueError(kind)
 
 
@@ -49,23 +48,24 @@ def baselines(df: pd.DataFrame, target: str = "up_next") -> pd.DataFrame:
                          "momentum": (df["ret"] > 0).astype(float)}, index=df.index)
 
 
-def metrics(y: pd.Series, prob: pd.Series) -> dict:
-    m = pd.concat([y, prob], axis=1, keys=["y", "p"]).dropna()
+def metrics(y: pd.Series, prob: pd.Series, ret: pd.Series) -> dict:
+    """ret 是隔天報酬（連續值）。ic = Spearman(預測機率, 隔天報酬)：AUC 只看漲跌，ic 也用到漲跌幅。"""
+    m = pd.concat([y, prob, ret], axis=1, keys=["y", "p", "r"]).dropna()
     out = {"n": len(m), "accuracy": accuracy_score(m["y"], m["p"] > 0.5),
            "up_rate": m["y"].mean()}
     if m["p"].nunique() > 2:
         out["auc"] = roc_auc_score(m["y"], m["p"])
         out["brier"] = brier_score_loss(m["y"], m["p"].clip(0, 1))
+        out["ic"], out["ic_p"] = spearmanr(m["p"], m["r"])
     return out
 
 
 def run_all(df: pd.DataFrame, min_train: int, refit_every: int) -> pd.DataFrame:
     """回傳每天各模型的預測機率（欄位 = 模型名稱）。"""
     probs = baselines(df)
-    for kind in ("logit", "gbm"):
-        for name, feats in FEATURE_SETS.items():
-            wf = walk_forward(df, feats, kind, min_train=min_train, refit_every=refit_every)
-            probs[f"{name}_{kind}"] = wf["prob"]
+    for name, feats in FEATURE_SETS.items():
+        wf = walk_forward(df, feats, "logit", min_train=min_train, refit_every=refit_every)
+        probs[f"{name}_logit"] = wf["prob"]
     first_oos = probs.drop(columns=["always_up", "momentum"]).dropna(how="all").index.min()
     return probs[probs.index >= first_oos]
 
