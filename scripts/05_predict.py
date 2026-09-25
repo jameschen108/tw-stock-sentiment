@@ -15,7 +15,7 @@ pd.set_option("display.max_columns", 20)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from pttsent import plots  # noqa: E402
-from pttsent.backtest import backtest, summary, trade_costs  # noqa: E402
+from pttsent.backtest import backtest, low_sentiment_days, summary, trade_costs  # noqa: E402
 from pttsent.config import METHODS, TARGETS, load_config, output_path, target_suffix, work_path  # noqa: E402
 from pttsent.features import period  # noqa: E402
 from pttsent.models import auc_diff_ci, metrics, run_all  # noqa: E402
@@ -68,6 +68,13 @@ def main():
     strategies = {"買進持有": pd.Series(1.0, index=probs.index)}
     for m in ["A_price_logit", "B_price_sent_logit", "A_price_gbm", "B_price_sent_gbm"]:
         strategies[m] = (probs[m] > 0.5).astype(float)
+    if daytrade:   # 放空當沖：開盤先賣、收盤買回
+        strategies["放空_每天"] = pd.Series(-1.0, index=probs.index)
+        for m in ["A_price_logit", "B_price_sent_logit"]:
+            strategies[f"放空_{m}"] = -(probs[m] < 0.5).astype(float)
+        # 門檻用完整歷史滾動計算（只看過去），再切到評估期
+        low = low_sentiment_days(daily["sent_mean"]).reindex(probs.index).fillna(False)
+        strategies["放空_低情緒"] = -low.astype(float)
     for name, pos in strategies.items():
         bt = backtest(ret_next, pos, buy, sell, round_trip=daytrade)
         curves[name] = bt["equity"]
