@@ -60,7 +60,7 @@ SCHEMA = {
     "additionalProperties": False,
 }
 
-# 每百萬 token 的（輸入, 輸出, 快取讀取）美元；快取寫入是輸入的 1.25 倍，Batches API 再打五折
+# 每百萬 token 的（輸入, 輸出, 快取讀取）美元；快取寫入是輸入的 1.25 倍（1 小時 TTL 為 2 倍），Batches API 再打五折
 PRICES = {
     "claude-opus-5-5": (4.0, 20.0, 0.20),
     "claude-opus-5": (5.0, 25.0, 0.50),
@@ -90,14 +90,16 @@ def _user_message(row, ticker, name) -> str:
     return f"目標股票：{ticker}（{name}）\n{ctx}{'留言' if row['kind'] == 'comment' else '文章'}內容：\n{text}"
 
 
-def request_params(cfg, row, ticker, name) -> dict:
+def request_params(cfg, row, ticker, name, cache_ttl=None) -> dict:
+    """cache_ttl="1h"：batch 會陸續處理幾十分鐘，預設 5 分鐘的快取容易過期，改用 1 小時提高命中率。"""
+    cache_control = {"type": "ephemeral", **({"ttl": cache_ttl} if cache_ttl else {})}
     output_config = {"format": {"type": "json_schema", "schema": SCHEMA}}
     if cfg["llm"].get("effort"):
         output_config["effort"] = cfg["llm"]["effort"]
     return {
         "model": cfg["llm"]["model"],
         "max_tokens": 2048,
-        "system": [{"type": "text", "text": SYSTEM, "cache_control": {"type": "ephemeral"}}],
+        "system": [{"type": "text", "text": SYSTEM, "cache_control": cache_control}],
         "messages": [{"role": "user", "content": _user_message(row, ticker, name)}],
         "output_config": output_config,
     }
@@ -110,6 +112,7 @@ def _usage(msg) -> dict:
             "input_tokens": u.input_tokens,
             "output_tokens": u.output_tokens,
             "cache_write_tokens": u.cache_creation_input_tokens or 0,
+            "cache_write_1h_tokens": getattr(u.cache_creation, "ephemeral_1h_input_tokens", 0) or 0,
             "cache_read_tokens": u.cache_read_input_tokens or 0}
 
 
@@ -141,7 +144,7 @@ def submit_batch(cfg, sample: pd.DataFrame, ticker, name) -> str:
 
     client = _client()
     reqs = [Request(custom_id=r["custom_id"],
-                    params=MessageCreateParamsNonStreaming(**request_params(cfg, r, ticker, name)))
+                    params=MessageCreateParamsNonStreaming(**request_params(cfg, r, ticker, name, "1h")))
             for _, r in sample.iterrows()]
     batch = client.messages.batches.create(requests=reqs)
     return batch.id
@@ -151,15 +154,17 @@ def batch_status(batch_id: str):
     return _client().messages.batches.retrieve(batch_id)
 
 
-def collect_batch(batch_id: str, sample: pd.DataFrame) -> pd.DataFrame:
+def collect_batch(batch_ids: list[str], sample: pd.DataFrame) -> pd.DataFrame:
+    """合併多個 batch 的結果；只回傳有送出的那些則。"""
     client = _client()
     rows = []
-    for res in client.messages.batches.results(batch_id):
-        if res.result.type == "succeeded":
-            rows.append({"custom_id": res.custom_id, **_parse_message(res.result.message)})
-        else:   # errored / canceled / expired：可以重送
-            rows.append({"custom_id": res.custom_id, "status": res.result.type})
-    return sample.merge(pd.DataFrame(rows), on="custom_id", how="left")
+    for batch_id in batch_ids:
+        for res in client.messages.batches.results(batch_id):
+            if res.result.type == "succeeded":
+                rows.append({"custom_id": res.custom_id, **_parse_message(res.result.message)})
+            else:   # errored / canceled / expired：可以重送
+                rows.append({"custom_id": res.custom_id, "status": res.result.type})
+    return sample.merge(pd.DataFrame(rows), on="custom_id", how="inner")
 
 
 def label_sync(cfg, sample: pd.DataFrame, ticker, name) -> pd.DataFrame:
@@ -199,17 +204,21 @@ def label_counts(labeled: pd.DataFrame) -> dict:
 
 def usage_summary(labeled: pd.DataFrame, batch: bool = False) -> dict:
     """加總 token 並依 PRICES 估算美元；不在價目表裡的模型不計入 usd。"""
-    cols = ["input_tokens", "output_tokens", "cache_write_tokens", "cache_read_tokens"]
+    cols = ["input_tokens", "output_tokens", "cache_write_tokens", "cache_write_1h_tokens",
+            "cache_read_tokens"]
     if "model_used" not in labeled:
         return {}
     df = labeled.dropna(subset=["model_used"])
+    if "cache_write_1h_tokens" not in df:   # 舊的結果沒有這欄
+        df = df.assign(cache_write_1h_tokens=0)
     price = df["model_used"].map(PRICES)
     known = price.notna()
     inp = price[known].str[0] / 1e6
     out = price[known].str[1] / 1e6
     cache_read = price[known].str[2] / 1e6
     d = df[known]
-    usd = (d["input_tokens"] * inp + d["cache_write_tokens"] * inp * 1.25
+    write_5m = d["cache_write_tokens"] - d["cache_write_1h_tokens"]
+    usd = (d["input_tokens"] * inp + write_5m * inp * 1.25 + d["cache_write_1h_tokens"] * inp * 2
            + d["cache_read_tokens"] * cache_read + d["output_tokens"] * out).sum()
     return {**{c: int(df[c].sum()) for c in cols},
             "models": df["model_used"].value_counts().to_dict(),

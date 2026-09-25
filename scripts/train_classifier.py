@@ -1,4 +1,4 @@
-"""訓練情緒分類器（選用）。訓練完，步驟 2 用 --method classifier 就會改用它。
+"""訓練情緒分類器（選用）。訓練完，步驟 2 用 --method classifier_weak 或 classifier_llm 就會改用它。
 
     python scripts/train_classifier.py --labels weak   # [標的] 文的「分類：多／空」弱標籤，不花錢
     python scripts/train_classifier.py --labels llm    # scripts/llm_label.py collect 產生的標籤
@@ -71,6 +71,7 @@ def main():
     })
     print(f"\n-> {path}")
     print(f"-> {path.with_suffix('.json')}")
+
 
 if __name__ == "__main__":
     main()

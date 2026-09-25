@@ -40,5 +40,5 @@ llm:
   model: claude-opus-5-5         # 想省錢可改 claude-haiku-4-5，並把 effort 設成 null
   effort: medium             # Opus 5 上 low 在模糊案例（幹話、反諷）不穩定，medium 較一致；Opus 5.5 的預設也是 medium
   fallbacks: true                # 被安全機制拒答時由伺服器改用其他模型；只在 sync 模式有效（Batches API 不支援）
-  n_samples: 2000
+  n_samples: 4000
   seed: 42
