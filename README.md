@@ -35,7 +35,7 @@ python scripts/05_predict.py          # 滾動式預測＋回測
 python -m pytest                      # 測試（時間對齊、不偷看未來、成本計算）
 ```
 
-步驟 2–5 都可加 `--ticker`、`--method`（`lexicon` / `classifier_weak` / `classifier_llm`）；
+步驟 2–5 都可加 `--ticker`、`--method`（`lexicon` / `classifier_weak` / `classifier_llm` / `classifier_llm_pooled`）；
 步驟 3–5 可加 `--target open_to_close` 改成預測隔天開盤到收盤，結果存在 `*_oc` 資料夾，不會蓋掉原本的。
 `scripts/06_prereg_test.py` 是預先登記的最終檢定（見 [PREREGISTRATION.md](PREREGISTRATION.md)）。
 
@@ -116,7 +116,12 @@ PTT 原始資料 ──> 挑出討論 2330 的文字 ──> 每則情緒分數 
 小分類器（字元 n-gram TF-IDF + logistic regression）分得出幹話，但多空分得不好（看空 F1 約 0.25）：
 反諷與語意字面上學不到，看空的樣本也少。
 
-訓練好的模型存在 `data/models/`：弱標籤是 `sentiment_clf_weak.joblib`，LLM 標籤每檔股票各一個 `sentiment_clf_llm_{代號}.joblib`。
+`train_classifier.py --labels llm_pooled` 把兩檔股票的 LLM 標籤合併（5,902 則）訓練一個共用的分類器（`--method classifier_llm_pooled`）。
+同一時間切點、同一批測試文字下，和只用自家標籤比：2330 macro-F1 0.464 → 0.509、看空 0.245 → 0.379（bootstrap 95% CI 不含 0）；
+2603 是 0.441 → 0.455，差距在雜訊範圍內。但 2330 的每日情緒和原本的相關 0.87（每天約 60 個帳號平均後，單則的誤判大多抵銷），
+下游結果幾乎沒變（見[結果](#結果)的「LLM 合併」列）。
+
+訓練好的模型存在 `data/models/`：弱標籤是 `sentiment_clf_weak.joblib`，LLM 標籤每檔股票各一個 `sentiment_clf_llm_{代號}.joblib`，合併訓練的是 `sentiment_clf_llm_pooled.joblib`。
 旁邊同名的 `.json` 記錄標籤來源、訓練期間、測試成績和 scikit-learn 版本。讀模型時若版本不同會警告，請重訓。
 
 ## 結果
@@ -129,6 +134,7 @@ PTT 原始資料 ──> 挑出討論 2330 的文字 ──> 每則情緒分數 
 | 2330 詞典 cc | 0.112 | −0.012 | 0.61 | 0.003 | −0.020 [−0.041, +0.002] |
 | 2330 弱標籤 cc | 0.024 | −0.021 | 0.23 | — | −0.019 [−0.044, +0.003] |
 | 2330 LLM cc | 0.132 | −0.024 | 0.19 | 0.0001 | −0.000 [−0.020, +0.014] |
+| 2330 LLM 合併 cc | 0.124 | −0.025 | 0.17 | 0.0004 | −0.005 [−0.027, +0.013] |
 | 2330 詞典 oc | — | 0.017 | 0.28 | — | −0.006 [−0.032, +0.014] |
 | 2330 LLM oc | — | −0.001 | 0.65 | — | −0.000 [−0.027, +0.021] |
 | 2603 詞典 cc | 0.122 | 0.021 | 0.47 | <0.0001 | −0.003 [−0.024, +0.015] |

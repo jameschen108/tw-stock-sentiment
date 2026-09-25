@@ -3,6 +3,7 @@
     python scripts/02_score_sentiment.py                     # 用 config 的方法（預設 lexicon）
     python scripts/02_score_sentiment.py --method classifier_weak  # 需先跑 train_classifier.py --labels weak
     python scripts/02_score_sentiment.py --method classifier_llm   # 需先跑 train_classifier.py --labels llm
+    python scripts/02_score_sentiment.py --method classifier_llm_pooled  # 需先跑 train_classifier.py --labels llm_pooled
 """
 import argparse
 import sys

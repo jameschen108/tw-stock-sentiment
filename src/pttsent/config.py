@@ -5,7 +5,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-METHODS = ["lexicon", "classifier_weak", "classifier_llm"]
+METHODS = ["lexicon", "classifier_weak", "classifier_llm", "classifier_llm_pooled"]
 TARGETS = ["close_to_close", "open_to_close"]
 
 
@@ -43,8 +43,12 @@ def load_config(path=None) -> dict:
 
 
 def classifier_path(cfg, labels: str, ticker: str) -> Path:
-    """弱標籤不分股票，共用一個模型；LLM 標籤是針對某檔股票標的，每檔各一個。"""
-    name = "sentiment_clf_weak" if labels == "weak" else f"sentiment_clf_llm_{ticker}"
+    """弱標籤不分股票，共用一個模型；LLM 標籤是針對某檔股票標的，每檔各一個；
+    llm_pooled 是所有股票的 LLM 標籤合併訓練，共用一個。"""
+    if labels in ("weak", "llm_pooled"):
+        name = f"sentiment_clf_{labels}"
+    else:
+        name = f"sentiment_clf_llm_{ticker}"
     return cfg["sentiment"]["classifier_dir"] / f"{name}.joblib"
 
 

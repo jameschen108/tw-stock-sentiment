@@ -34,12 +34,16 @@ def split_by_time(df: pd.DataFrame, test_frac: float = 0.2):
 
 
 def train(df: pd.DataFrame, test_frac: float = 0.2):
-    """回傳（用全部資料重訓的模型, 時間切分測試集上的 classification_report dict）。"""
+    """回傳（用全部資料重訓的模型, 時間切分的測試集，多一欄 pred 是只用前段訓練時的預測）。"""
     tr, te = split_by_time(df, test_frac)
     model = build_pipeline().fit(tr["text"], tr["label"])
-    report = classification_report(te["label"], model.predict(te["text"]), output_dict=True)
-    model = build_pipeline().fit(df["text"], df["label"])   # 報告完再用全部資料重訓
-    return model, report
+    te = te.assign(pred=model.predict(te["text"]))
+    model = build_pipeline().fit(df["text"], df["label"])   # 評估完再用全部資料重訓
+    return model, te
+
+
+def report(test: pd.DataFrame) -> dict:
+    return classification_report(test["label"], test["pred"], output_dict=True, zero_division=0)
 
 
 def score(model, texts) -> np.ndarray:

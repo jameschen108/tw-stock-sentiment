@@ -1,6 +1,6 @@
 """步驟 3：把每則情緒彙整成每日特徵，並接上量價與預測目標。
 
-    python scripts/03_build_features.py [--method lexicon|classifier_weak|classifier_llm]
+    python scripts/03_build_features.py [--method lexicon|classifier_weak|classifier_llm|classifier_llm_pooled]
     python scripts/03_build_features.py --target open_to_close   # 預測隔天開盤到收盤
 
 open_to_close 時，每日情緒改收到「隔天 09:00 開盤前」為止，盤後到開盤前的討論也算進去；

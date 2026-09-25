@@ -1,8 +1,10 @@
 import json
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
+from pttsent.config import classifier_path
 from pttsent.sentiment import classifier
 
 
@@ -28,3 +30,11 @@ def test_load_warns_on_sklearn_version_mismatch(tmp_path):
     path.with_suffix(".json").write_text(json.dumps({**meta, "sklearn_version": "0.0.1"}), encoding="utf-8")
     with pytest.warns(UserWarning, match="0.0.1"):
         classifier.load(path)
+
+
+def test_pooled_model_has_its_own_file():
+    """合併模型不能蓋掉各股票的模型（2603 的模型是預先登記檢定用的）。"""
+    cfg = {"sentiment": {"classifier_dir": Path("models")}}
+    pooled = classifier_path(cfg, "llm_pooled", "2603")
+    assert pooled != classifier_path(cfg, "llm", "2603")
+    assert pooled == classifier_path(cfg, "llm_pooled", "2330")
