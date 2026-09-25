@@ -91,6 +91,17 @@ def mention_pattern(ticker: str, aliases) -> str:
     return "(?i)" + "|".join(alts)
 
 
+def ticker_exclude(cfg, ticker) -> list:
+    return (cfg.get("exclude") or {}).get(ticker, [])
+
+
+def _mentions(arr, pat: str, exclude_pat: str | None):
+    """先刪掉排除詞再比對，避免別名撞到其他公司（例如「長榮」撞「長榮航」）。"""
+    if exclude_pat:
+        arr = pc.replace_substring_regex(arr, exclude_pat, "")
+    return pc.fill_null(pc.match_substring_regex(arr, pat), False)
+
+
 def ticker_aliases(cfg, ticker) -> list:
     if ticker in (cfg.get("aliases") or {}):
         return cfg["aliases"][ticker]
@@ -99,7 +110,8 @@ def ticker_aliases(cfg, ticker) -> list:
     return row["name_short"].tolist()
 
 
-def select_texts(ptt_dir: Path, years, ticker: str, aliases, max_lag_days: int) -> pd.DataFrame:
+def select_texts(ptt_dir: Path, years, ticker: str, aliases, max_lag_days: int,
+                 exclude=()) -> pd.DataFrame:
     """挑出討論這檔股票的文字。
 
     文章：標題提到它。只有內文提到的不算——實測大多是發文範本、融資融券表或順帶一提。
@@ -107,10 +119,11 @@ def select_texts(ptt_dir: Path, years, ticker: str, aliases, max_lag_days: int) 
     回傳欄位：uid kind article_id time account text tag title category n_push n_boo
     """
     pat = mention_pattern(ticker, aliases)
+    exclude_pat = "|".join(re.escape(e) for e in exclude) or None
     out = []
     for y in years:
         arts = pq.read_table(ptt_dir / f"articles_{y}.parquet")
-        t_hit = pc.fill_null(pc.match_substring_regex(arts["title"], pat), False)
+        t_hit = _mentions(arts["title"], pat, exclude_pat)
         sel = arts.filter(t_hit).to_pandas()
         threads = arts.filter(t_hit)["article_id"].combine_chunks()
         titles = dict(zip(arts["article_id"].to_pylist(), arts["title"].to_pylist()))
@@ -123,7 +136,7 @@ def select_texts(ptt_dir: Path, years, ticker: str, aliases, max_lag_days: int) 
 
         coms = pq.read_table(ptt_dir / f"comments_{y}.parquet")
         in_thread = pc.is_in(coms["article_id"], value_set=threads)
-        hit = pc.fill_null(pc.match_substring_regex(coms["content"], pat), False)
+        hit = _mentions(coms["content"], pat, exclude_pat)
         lag = coms["lag_sec"]
         lag_ok = pc.and_(pc.greater_equal(lag, -120),
                          pc.less_equal(lag, max_lag_days * 86400))

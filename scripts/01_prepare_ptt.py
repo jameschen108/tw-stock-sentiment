@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from pttsent.config import load_config, work_path  # noqa: E402
-from pttsent.ptt import convert_year, select_texts, ticker_aliases  # noqa: E402
+from pttsent.ptt import convert_year, select_texts, ticker_aliases, ticker_exclude  # noqa: E402
 
 
 def main():
@@ -32,7 +32,7 @@ def main():
 
     aliases = ticker_aliases(cfg, ticker)
     df = select_texts(ptt_dir, cfg["ptt_years"], ticker, aliases,
-                      cfg["sentiment"]["max_comment_lag_days"])
+                      cfg["sentiment"]["max_comment_lag_days"], ticker_exclude(cfg, ticker))
     out = work_path(cfg, "interim", f"texts_{ticker}.parquet")
     df.to_parquet(out, index=False)
     by_kind = df["kind"].value_counts().to_dict()

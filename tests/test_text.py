@@ -3,7 +3,7 @@ import math
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from pttsent.ptt import mention_pattern, strip_quotes
+from pttsent.ptt import _mentions, mention_pattern, strip_quotes
 from pttsent.sentiment.lexicon import score_text
 from pttsent.sentiment.weak_labels import label_from_content, training_text
 
@@ -35,6 +35,12 @@ def test_mention_pattern_respects_digit_boundaries():
     pat = mention_pattern("2330", ["台積電"])
     arr = pa.array(["2330 今天", "代號12330", "台積電噴", "23300", "(2330)"])
     assert pc.match_substring_regex(arr, pat).to_pylist() == [True, False, True, False, True]
+
+
+def test_mentions_drops_excluded_words_first():
+    pat = mention_pattern("2603", ["長榮"])
+    arr = pa.array(["長榮航 飛起來", "長榮 目標價", "長榮航 vs 長榮海運", None])
+    assert _mentions(arr, pat, "長榮航").to_pylist() == [False, True, True, False]
 
 
 def test_weak_labels():
