@@ -60,12 +60,13 @@ SCHEMA = {
     "additionalProperties": False,
 }
 
-# 每百萬 token 的（輸入, 輸出）美元；快取寫入 1.25 倍、讀取 0.1 倍，Batches API 再打五折
+# 每百萬 token 的（輸入, 輸出, 快取讀取）美元；快取寫入是輸入的 1.25 倍，Batches API 再打五折
 PRICES = {
-    "claude-opus-5": (5.0, 25.0),
-    "claude-opus-4-8": (5.0, 25.0),
-    "claude-sonnet-5": (2.0, 10.0),
-    "claude-haiku-4-5": (1.0, 5.0),
+    "claude-opus-5-5": (4.0, 20.0, 0.20),
+    "claude-opus-5": (5.0, 25.0, 0.50),
+    "claude-opus-4-8": (5.0, 25.0, 0.50),
+    "claude-sonnet-5": (2.0, 10.0, 0.20),
+    "claude-haiku-4-5": (1.0, 5.0, 0.10),
 }
 
 
@@ -162,7 +163,7 @@ def collect_batch(batch_id: str, sample: pd.DataFrame) -> pd.DataFrame:
 
 
 def label_sync(cfg, sample: pd.DataFrame, ticker, name) -> pd.DataFrame:
-    """逐則呼叫，用來小量試跑。claude-opus-5 預設開啟伺服器端 fallback（被安全機制拒答時自動改用其他模型）。"""
+    """逐則呼叫，用來小量試跑。config 的 fallbacks 開啟時，被安全機制拒答會由伺服器自動改用其他模型。"""
     import anthropic
     client = _client()
     rows = []
@@ -206,9 +207,10 @@ def usage_summary(labeled: pd.DataFrame, batch: bool = False) -> dict:
     known = price.notna()
     inp = price[known].str[0] / 1e6
     out = price[known].str[1] / 1e6
+    cache_read = price[known].str[2] / 1e6
     d = df[known]
     usd = (d["input_tokens"] * inp + d["cache_write_tokens"] * inp * 1.25
-           + d["cache_read_tokens"] * inp * 0.1 + d["output_tokens"] * out).sum()
+           + d["cache_read_tokens"] * cache_read + d["output_tokens"] * out).sum()
     return {**{c: int(df[c].sum()) for c in cols},
             "models": df["model_used"].value_counts().to_dict(),
             "usd": round(float(usd) * (0.5 if batch else 1.0), 4),
