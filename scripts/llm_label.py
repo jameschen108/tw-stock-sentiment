@@ -1,6 +1,6 @@
 """用 Claude 標註情緒（選用，會產生 API 費用）。先 pip install anthropic 並設定 ANTHROPIC_API_KEY。
 
-    python scripts/llm_label.py sample            # 抽樣（不花錢）
+    python scripts/llm_label.py sample            # 抽樣（不花錢）；--n 可改抽樣數
     python scripts/llm_label.py sync --n 20       # 先試 20 則，檢查標得合不合理
     python scripts/llm_label.py submit            # 把還沒送過的全部送 Batches API（五折，通常一小時內完成）
     python scripts/llm_label.py submit --n 400    # 或分批送：先送 400 則，量實際費用再決定
@@ -26,7 +26,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["sample", "sync", "submit", "status", "collect"])
     ap.add_argument("--ticker")
-    ap.add_argument("--n", type=int, help="sync 預設 20 則；submit 預設送出全部還沒送過的")
+    ap.add_argument("--n", type=int, help="sample 預設 config 的 n_samples；sync 預設 20 則；"
+                                          "submit 預設送出全部還沒送過的")
     a = ap.parse_args()
     cfg = load_config()
     ticker = a.ticker or str(cfg["ticker"])
@@ -39,7 +40,7 @@ def main():
         texts = texts[texts["time"].dt.year.isin(cfg["ptt_years"])]
         # 最終測試期的文字訓練分類器時會排除，標了也用不到
         texts = texts[texts["time"] < pd.Timestamp(cfg["split"]["final_test_start"])]
-        s = L.sample_texts(texts, cfg["llm"]["n_samples"], cfg["llm"]["seed"])
+        s = L.sample_texts(texts, a.n or cfg["llm"]["n_samples"], cfg["llm"]["seed"])
         s.to_parquet(sample_path, index=False)
         print(f"抽出 {len(s):,} 則 {s.groupby(['year', 'kind']).size().unstack().to_dict()}")
         print(f"-> {sample_path}")
