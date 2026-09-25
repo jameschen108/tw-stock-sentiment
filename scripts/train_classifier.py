@@ -2,6 +2,8 @@
 
     python scripts/train_classifier.py --labels weak   # [標的] 文的「分類：多／空」弱標籤，不花錢
     python scripts/train_classifier.py --labels llm    # scripts/llm_label.py collect 產生的標籤
+
+最終測試期（config 的 split.final_test_start 之後）的文字一律排除。
 """
 import argparse
 import sys
@@ -38,6 +40,11 @@ def main():
         ds = weak_label_dataset(work_path(cfg, "interim", "ptt", "x").parent, cfg["ptt_years"])
     else:
         ds = to_training(pd.read_parquet(work_path(cfg, "llm", f"labels_{ticker}.parquet")))
+    # 最終測試期的文字不進訓練，也不拿來看測試成績，否則開發時就先看過 2024 了
+    final_start = pd.Timestamp(cfg["split"]["final_test_start"])
+    n_all = len(ds)
+    ds = ds[ds["time"] < final_start].reset_index(drop=True)
+    print(f"排除 {final_start.date()} 之後的 {n_all - len(ds):,} 則（最終測試期）")
     print(f"標籤 {len(ds):,} 則：{ds['label'].value_counts().to_dict()}")
 
     model, report = classifier.train(ds)
