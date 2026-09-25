@@ -7,17 +7,24 @@ import numpy as np
 import pandas as pd
 
 
-def trade_costs(cfg):
+def trade_costs(cfg, daytrade: bool = False):
     fee = cfg["costs"]["fee_rate"] * cfg["costs"]["fee_discount"]
-    return fee, fee + cfg["costs"]["tax_rate"]   # (買進成本, 賣出成本)
+    tax = cfg["costs"]["daytrade_tax_rate"] if daytrade else cfg["costs"]["tax_rate"]
+    return fee, fee + tax   # (買進成本, 賣出成本)
 
 
 def backtest(ret_next: pd.Series, position: pd.Series, buy_cost: float,
-             sell_cost: float) -> pd.DataFrame:
-    """position[t] ∈ {0, 1}：t 收盤到 t+1 收盤是否持有。ret_next 為對數報酬。"""
+             sell_cost: float, round_trip: bool = False) -> pd.DataFrame:
+    """position[t] ∈ {0, 1}：t 收盤到 t+1 收盤是否持有。ret_next 為對數報酬。
+
+    round_trip=True：ret_next 是 t+1 開盤到收盤，每個持有日都是開盤買、收盤賣，都要付一次來回成本。
+    """
     pos = position.astype(float).fillna(0.0)
-    change = pos.diff().fillna(pos.iloc[0])
-    cost = np.where(change > 0, change * buy_cost, -np.minimum(change, 0) * sell_cost)
+    if round_trip:
+        cost = pos.to_numpy() * (buy_cost + sell_cost)
+    else:
+        change = pos.diff().fillna(pos.iloc[0])
+        cost = np.where(change > 0, change * buy_cost, -np.minimum(change, 0) * sell_cost)
     gross = pos * np.expm1(ret_next)
     net = gross - cost
     return pd.DataFrame({"position": pos, "gross": gross, "cost": cost, "net": net,

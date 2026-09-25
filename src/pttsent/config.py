@@ -6,6 +6,12 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 METHODS = ["lexicon", "classifier_weak", "classifier_llm"]
+TARGETS = ["close_to_close", "open_to_close"]
+
+
+def target_suffix(target: str) -> str:
+    """close_to_close 沿用原本的檔名；其他目標加後綴，避免蓋掉彼此的結果。"""
+    return "" if target == "close_to_close" else "_oc"
 
 
 def load_env(path=None) -> None:

@@ -16,7 +16,7 @@ pd.set_option("display.max_columns", 20)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from pttsent import plots  # noqa: E402
 from pttsent.backtest import backtest, summary, trade_costs  # noqa: E402
-from pttsent.config import METHODS, load_config, output_path, work_path  # noqa: E402
+from pttsent.config import METHODS, TARGETS, load_config, output_path, target_suffix, work_path  # noqa: E402
 from pttsent.features import period  # noqa: E402
 from pttsent.models import auc_diff_ci, metrics, run_all  # noqa: E402
 
@@ -25,15 +25,17 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ticker")
     ap.add_argument("--method", choices=METHODS)
+    ap.add_argument("--target", choices=TARGETS)
     ap.add_argument("--final", action="store_true")
     a = ap.parse_args()
     cfg = load_config()
     ticker = a.ticker or str(cfg["ticker"])
     method = a.method or cfg["sentiment"]["method"]
+    suffix = target_suffix(a.target or cfg["target"])
     tag = "final" if a.final else "dev"
-    out = lambda name: output_path(cfg, ticker, method, f"predict_{tag}", name)  # noqa: E731
+    out = lambda name: output_path(cfg, ticker, method, f"predict_{tag}{suffix}", name)  # noqa: E731
 
-    daily = pd.read_parquet(work_path(cfg, "processed", f"daily_{ticker}_{method}.parquet"))
+    daily = pd.read_parquet(work_path(cfg, "processed", f"daily_{ticker}_{method}{suffix}.parquet"))
     df = period(daily, cfg, a.final)
     probs = run_all(df, cfg["split"]["min_train_days"], cfg["split"]["refit_every"])
     if a.final:
@@ -59,19 +61,20 @@ def main():
         print(f"{kind}: AUC(量價+情緒) - AUC(只用量價) = {pt:+.4f}  95% CI [{lo:+.4f}, {hi:+.4f}]")
     json.dump(ci, open(out("auc_diff.json"), "w"), indent=2)
 
-    buy, sell = trade_costs(cfg)
+    daytrade = bool(suffix)   # open_to_close：每個持有日都是開盤買、收盤賣
+    buy, sell = trade_costs(cfg, daytrade)
     ret_next = df.loc[probs.index, "ret_next"]
     curves, rows = {}, {}
     strategies = {"買進持有": pd.Series(1.0, index=probs.index)}
     for m in ["A_price_logit", "B_price_sent_logit", "A_price_gbm", "B_price_sent_gbm"]:
         strategies[m] = (probs[m] > 0.5).astype(float)
     for name, pos in strategies.items():
-        bt = backtest(ret_next, pos, buy, sell)
+        bt = backtest(ret_next, pos, buy, sell, round_trip=daytrade)
         curves[name] = bt["equity"]
         rows[name] = summary(bt)
     bts = pd.DataFrame(rows).T
     bts.to_csv(out("backtest.csv"))
-    print(f"\n回測（買進成本 {buy:.4%}，賣出成本 {sell:.4%}）")
+    print(f"\n回測（買進成本 {buy:.4%}，賣出成本 {sell:.4%}{'，每個持有日都是當沖' if daytrade else ''}）")
     print(bts.round(4))
     plots.equity_curves(curves, out("equity.png"), f"{ticker} 策略淨值（{tag}）")
     print(f"\n結果 -> {out('x').parent}")

@@ -19,7 +19,7 @@ exclude:
 # 時間對齊：收盤（13:30）之後的貼文算到下一個交易日
 cutoff: "13:30"
 # 預測目標：close_to_close = 明天收盤相對今天收盤；open_to_close = 明天開盤到收盤
-target: close_to_close
+target: close_to_close   # 也可在步驟 3–5 用 --target open_to_close 覆寫
 
 sentiment:
   method: lexicon            # lexicon | classifier_weak | classifier_llm
@@ -38,6 +38,7 @@ costs:
   fee_rate: 0.001425
   fee_discount: 1.0              # 券商手續費折扣，例如 0.28 = 2.8 折
   tax_rate: 0.003                # 賣出證交稅（現股）
+  daytrade_tax_rate: 0.0015      # 現股當沖證交稅減半；target=open_to_close 時每天都是一次當沖
 
 llm:
   model: claude-opus-5-5         # 想省錢可改 claude-haiku-4-5，並把 effort 設成 null

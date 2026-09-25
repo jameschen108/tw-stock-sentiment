@@ -14,7 +14,7 @@ pd.set_option("display.max_columns", 20)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from pttsent import analysis, plots  # noqa: E402
-from pttsent.config import METHODS, load_config, output_path, work_path  # noqa: E402
+from pttsent.config import METHODS, TARGETS, load_config, output_path, target_suffix, work_path  # noqa: E402
 from pttsent.features import period  # noqa: E402
 
 CONTROLS = ["ret", "ret_lag1", "ret_lag2", "mkt_ret", "vol_20", "vlm_z"]
@@ -24,16 +24,18 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ticker")
     ap.add_argument("--method", choices=METHODS)
+    ap.add_argument("--target", choices=TARGETS)
     ap.add_argument("--final", action="store_true")
     a = ap.parse_args()
     cfg = load_config()
     ticker = a.ticker or str(cfg["ticker"])
     method = a.method or cfg["sentiment"]["method"]
+    suffix = target_suffix(a.target or cfg["target"])
 
-    daily = pd.read_parquet(work_path(cfg, "processed", f"daily_{ticker}_{method}.parquet"))
+    daily = pd.read_parquet(work_path(cfg, "processed", f"daily_{ticker}_{method}{suffix}.parquet"))
     df = period(daily, cfg, a.final)
     tag = "final" if a.final else "dev"
-    out = lambda name: output_path(cfg, ticker, method, f"analysis_{tag}", name)  # noqa: E731
+    out = lambda name: output_path(cfg, ticker, method, f"analysis_{tag}{suffix}", name)  # noqa: E731
     print(f"期間 {df.index.min().date()} .. {df.index.max().date()}（{len(df)} 天，{tag}）\n")
 
     xs = ["sent_mean", "bull_ratio", "sent_std", "log_posts", "attn_abn", "push_ratio"]
