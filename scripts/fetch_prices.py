@@ -4,7 +4,7 @@
     python scripts/fetch_prices.py --market tpex
     python scripts/fetch_prices.py --market twse --start 2015-01-01 --end 2025-06-30
 
-每個平日一個請求（非交易日會回空資料，也記下來），存到 data/prices/{market}/YYYYMMDD.json。
+每個平日（加上日曆上的週末補班日）一個請求（非交易日會回空資料，也記下來），存到 data/prices/{market}/YYYYMMDD.json。
 manifest.jsonl 記錄每一天的網址、抓取時間、筆數與 sha256；中斷後重跑會跳過已經記錄的日子。
 請求間隔預設 4.5 秒：兩個交易所都會封鎖太頻繁的請求。共用資料夾（PTT_DATA_DIR）不會被寫入。
 """
@@ -21,6 +21,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from pttsent.config import load_config, work_path  # noqa: E402
+from pttsent.prices import trading_days  # noqa: E402
 
 URLS = {
     "twse": "https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date={d:%Y%m%d}&type=ALLBUT0999&response=json",
@@ -60,7 +61,10 @@ def main():
     if manifest.exists():
         done = {json.loads(line)["date"] for line in manifest.read_text().splitlines() if line.strip()}
 
-    days = [d for d in pd.bdate_range(a.start, a.end) if d.strftime("%Y%m%d") not in done]
+    # 平日，加上共用資料夾日曆裡落在週末的交易日（補行上班日的週六也照常交易）
+    cal = trading_days(cfg["data_dir"])
+    extra = cal[(cal >= a.start) & (cal <= a.end) & (cal.dayofweek >= 5)]
+    days = [d for d in pd.bdate_range(a.start, a.end).union(extra) if d.strftime("%Y%m%d") not in done]
     print(f"{a.market}: 要抓 {len(days)} 天（已完成 {len(done)} 天），預估 {len(days) * a.sleep / 3600:.1f} 小時", flush=True)
     fails = 0
     for i, d in enumerate(days):
