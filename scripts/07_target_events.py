@@ -49,12 +49,14 @@ def main():
 
     res = [resolver.resolve(t, d) for t, d in zip(df["title"], df["time"])]
     df["code"], df["how"] = [r[0] for r in res], [r[1] for r in res]
-    retry = df["code"].isna() & df["how"].isin(["no_tw_stock", "multi"])
-    for i in df.index[retry]:                   # 標題對不到時，改看內文範本的「標的：」那一行
+    # 標題完全對不到台股時，改看內文範本的「標的：」那一行；但只接受有股號的比對
+    # （只比對到名稱太容易誤認，例如內文出現「世界」）；標題已經有多檔的不救回
+    retry = df["code"].isna() & (df["how"] == "no_tw_stock")
+    for i in df.index[retry]:
         m = TARGET_LINE.search(df.at[i, "content"] or "")
         if m:
             c, how = resolver.resolve(m.group(1), df.at[i, "time"])
-            if c:
+            if c and how != "name":
                 df.at[i, "code"], df.at[i, "how"] = c, f"body_{how}"
     reasons = df.loc[df["code"].isna(), "how"].value_counts().to_dict()
     idx_posts = df[df["how"] == "index"].copy()      # 大盤／台指文：探索性分析用加權指數
@@ -64,7 +66,7 @@ def main():
     df = df[df["code"].notna()].copy()
     steps.append(("對到一檔台股（含 ETF）", df))
 
-    df["common"] = df["code"].str.fullmatch(pnl.COMMON.pattern)
+    df["common"] = df["code"].str.fullmatch(pnl.COMMON.pattern)   # 存託憑證（-DR）在 merge 名稱後排除
     df["e"] = events.entry_positions(df["time"], days, cfg["cutoff"])
     df = df[df["e"] >= 0].copy()
     df["entry_date"] = days[df["e"]]
@@ -72,6 +74,7 @@ def main():
     df = pd.merge_asof(df.sort_values("entry_date"), listed[["date", "code", "name", "market"]],
                        left_on="entry_date", right_on="date", by="code", direction="backward")
     df = df[df["market"].notna()].drop(columns="date")
+    df["common"] = df["common"] & ~df["name"].str.endswith("-DR")
     steps.append(("entry 時已上市櫃", df))
 
     # 重複：同一作者（沒有作者時用相同標題）5 個交易日內對同一檔、同方向，只留第一篇

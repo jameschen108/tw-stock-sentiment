@@ -139,7 +139,7 @@ def build(work_dir: Path, data_dir) -> tuple[pd.DataFrame, pd.DataFrame]:
     df["limit_down_open"] = df["open"] <= df["base"] * 0.905
     df["limit_up_close"] = df["close"] >= up        # 收盤漲停：以收盤價進場通常買不到
     df["limit_down_close"] = df["close"] <= df["base"] * 0.905
-    df["common"] = df["code"].str.fullmatch(COMMON.pattern)
+    df["common"] = df["code"].str.fullmatch(COMMON.pattern) & ~df["name"].str.endswith("-DR")   # 存託憑證不算
 
     # 上櫃大盤：普通股依前一日市值加權
     otc = df[(df["market"] == "TPEx") & df["common"] & df["ret"].notna()].copy()
