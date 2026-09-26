@@ -61,8 +61,9 @@ def main():
         print(f"{label:14s}{fmt(r)}")
 
     print("\n== 穩健性")
-    tradable = ~((ar["direction"] == "bullish") & ar["limit_up_close"].fillna(False)) \
-        & ~((ar["direction"] == "bearish") & ar["limit_down_close"].fillna(False))
+    locked = ((ar["direction"] == "bullish") & ar["limit_up_close"].astype("boolean").fillna(False)) \
+        | ((ar["direction"] == "bearish") & ar["limit_down_close"].astype("boolean").fillna(False))
+    tradable = ~locked.astype(bool)
     checks = []
     for h in HORIZONS:
         checks += [(f"car_{h}", f"市場調整 {h} 天", ar, None)]
@@ -80,6 +81,14 @@ def main():
     print(rob.to_string(index=False, float_format=lambda x: f"{x:+.4f}"))
     rob.to_csv(out_dir / "robustness.csv", index=False)
 
+    print("\n== 進場收盤就漲停（看多）／跌停（看空）的事件：漲跌停造成的延續，而且買不到")
+    for side in ("bullish", "bearish"):
+        m = ar["direction"] == side
+        for h in (1, 5, 20):
+            a_, b_ = ar.loc[m & ~tradable, f"car_{h}"], ar.loc[m & tradable, f"car_{h}"]
+            print(f"  {'看多' if side == 'bullish' else '看空'} {h:>2} 天：鎖住的 {a_.mean():+.2%}（{a_.notna().sum()}）  其他 {b_.mean():+.2%}（{b_.notna().sum()}）")
+    results["share_locked"] = float((~tradable).mean())
+
     print("\n== 日曆時間組合（每天：持有中的看多事件 − 看空事件，Newey-West）")
     for h in (5, 20):
         s = es.calendar_time(ar, w, h)
@@ -88,8 +97,9 @@ def main():
               f"p = {r['p_two_sided']:.3f}  {r['n_days']} 天")
 
     print("\n== 各年（市場調整，看多 − 看空）")
-    ar["year"] = ar["entry_date"].dt.year
+    ar["year"] = ar["time"].dt.year      # 發文年份（年底的文 entry 可能落在隔年初）
     by_year = pd.DataFrame({y: {**{f"spread_{h}": es.spread_test(g, f"car_{h}")["spread"] for h in (5, 20)},
+                                **{f"tradable_{h}": es.spread_test(g[tradable[g.index]], f"car_{h}")["spread"] for h in (5, 20)},
                                 "n": len(g), "n_bear": int((g.direction == "bearish").sum()),
                                 "pre_20": es.spread_test(g, "pre_20")["spread"]}
                             for y, g in ar.groupby("year")}).T
