@@ -3,7 +3,7 @@ data_dir: /Users/jameschen/Project/data
 work_dir: data        # 中間產物（已 gitignore）
 output_dir: output    # 表格與圖（已 gitignore）
 
-ptt_years: [2019, 2020, 2021, 2022, 2023, 2024]
+ptt_years: [2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026]   # 2026 只到 09-26
 
 # 分析標的。別名用來判斷文章／留言是否在討論這檔股票；
 # 沒列在這裡的股票會自動用 universe_267.csv 的簡稱
@@ -29,7 +29,7 @@ sentiment:
 
 split:
   start: 2019-01-01
-  end: 2024-12-31                # PTT 資料只到 2024 年底
+  end: 2024-12-31                # PTT 已有 2025–2026，但股價等其他資料還沒補齊，分析期間先維持到 2024 年底
   final_test_start: 2024-01-01   # 最終測試期：開發時不碰，全部定案後才用 --final 跑一次
   min_train_days: 250
   refit_every: 21                # 每 21 個交易日（約一個月）重新訓練
