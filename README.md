@@ -8,9 +8,9 @@
 另外把作者自標多空的 [標的] 文當成個股推薦做事件研究（2016–2023 共 10,705 篇、1,467 檔）：
 作者在追漲，發文後的小差距來自漲跌停鎖住的延續，跟著看多文買扣成本後賠錢，2024 預先登記的檢定也沒通過。
 PTT 唯一站得住的用途是預測**熱不熱**：收盤後到隔天開盤前的討論量，在夜盤、台積電 ADR、費半、新聞量之外，
-能改善當天成交量的預測（樣本外 MSE 降 1–3%），2024 預先登記的檢定通過。
+能改善當天成交量的預測（樣本外 MSE 降 0.5–3%），2024 預先登記的檢定通過，2025–2026 的重複驗證也通過。
 詳見[結果](#結果)、[[標的] 事件研究](#標的-事件研究)、[開盤前討論量與成交量](#開盤前討論量與成交量)，
-以及 [PREREGISTRATION.md](PREREGISTRATION.md)、[PREREGISTRATION_TARGET.md](PREREGISTRATION_TARGET.md)、[PREREGISTRATION_VOLUME.md](PREREGISTRATION_VOLUME.md)。
+以及 [PREREGISTRATION.md](PREREGISTRATION.md)、[PREREGISTRATION_TARGET.md](PREREGISTRATION_TARGET.md)、[PREREGISTRATION_VOLUME.md](PREREGISTRATION_VOLUME.md)、[PREREGISTRATION_VOLUME_REPLICATION.md](PREREGISTRATION_VOLUME_REPLICATION.md)。
 
 要回答的核心問題不是「能不能預測股價」，而是：
 **加入情緒之後，比只用量價的模型好多少？**
@@ -269,6 +269,7 @@ python scripts/10_target_prereg.py --final     # 預先登記的最終測試（2
 python scripts/fetch_us.py                 # 台積電 ADR（TSM）與費半（^SOX）的日資料
 python scripts/11_volume_prereg.py         # 開發期 2019–2023：參考值與檢定力
 python scripts/11_volume_prereg.py --final # 最終測試 2024：預先登記 commit 後只跑一次（已跑過）
+python scripts/12_volume_replication.py --final # 重複驗證 2025-01 .. 2026-09（已跑過）
 ```
 
 - 目標：T 日的 log 成交量（主要）與 log 振幅 ln(高/低)。預測時點是 T 開盤前。
@@ -292,6 +293,8 @@ python scripts/11_volume_prereg.py --final # 最終測試 2024：預先登記 co
 效果小，而且它預測的是當天會不會比較熱，不是漲跌方向，所以前面「PTT 不能預測報酬」的結論不變。
 還沒控制的有長榮的運價、鴻海的蘋果與輝達、法說會與月營收公布日。
 
+**重複驗證（2025-01 .. 2026-09-24，預先登記）**：設定完全相同，只換期間（420 個交易日）。H1 三檔合併的成交量 CW t = 2.94（p = 0.002），**通過**；這次三檔各自也都通過 Holm 校正（台積電 2.22、長榮 2.49、鴻海 1.68），振幅（H3）CW t = 2.47 也通過，加入開盤跳空後仍顯著（2.78）。樣本外 MSE 變化：台積電 −1.06%、長榮 −1.99%、鴻海 −0.48%。長榮 2025 年以後的討論只剩以前的約 1/6，增量仍是三檔最大。詳見 [PREREGISTRATION_VOLUME_REPLICATION.md](PREREGISTRATION_VOLUME_REPLICATION.md)。
+
 ## 可以往哪裡做
 
 1. **換預測目標**：文獻上關注度常能預測**波動度**。最早試的版本沒有增量：隔天 |報酬| 的滾動式預測在過去波動之外
@@ -304,8 +307,7 @@ python scripts/11_volume_prereg.py --final # 最終測試 2024：預先登記 co
 5. **多檔股票要改週頻或事件研究**：掃過 301 檔有股價的股票，2019–2023 每交易日討論量中位數 ≥ 20 則的只有 2330、2603、2317；
    聯電、陽明、中鋼、友達只有 2021 前後夠多，其他幾乎都 ≤ 5 則。另外「統一」「南亞」「大成」「華電」這類簡稱大多撞到別的公司或一般用語。
    逐日的 panel 做不起來，要改成週頻，或以討論量暴增的日子做跨股票的事件研究。
-6. **新的最終測試資料**：以上任何新方向，都要用 2025 年以後的資料做一次性的樣本外驗證。
-   開盤前討論量的結果也可以用 2025 年以後的 PTT 再驗證一次（pttweb 只到 2025/01，要另外抓）。
+6. **新的最終測試資料**：2024 與 2025-01 .. 2026-09 都已經用掉了，之後的新方向要用 2026-10 以後的資料做一次性的樣本外驗證。
 
 ## 目錄
 
@@ -327,9 +329,10 @@ src/pttsent/
   volume.py               開盤前討論量、夜盤與美股對齊、滾動 OLS、Clark–West 檢定
 scripts/                  01–05 主流程；06 預先登記檢定；train_classifier.py、llm_label.py 為選用；
                           fetch_prices.py、build_panel.py、07–10 是 [標的] 事件研究；
-                          fetch_us.py、11 是開盤前討論量與成交量
+                          fetch_us.py、11、12 是開盤前討論量與成交量
 tests/                    時間對齊、不偷看未來、成本等不變量
 PREREGISTRATION.md        2603 盤中假設的預先登記與 2024 最終測試結果
 PREREGISTRATION_TARGET.md [標的] 事件研究的預先登記與最終測試結果
 PREREGISTRATION_VOLUME.md 開盤前討論量 → 成交量的預先登記與最終測試結果
+PREREGISTRATION_VOLUME_REPLICATION.md  同上，2025–2026 的重複驗證
 ```
