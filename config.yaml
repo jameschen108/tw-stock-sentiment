@@ -39,6 +39,10 @@ costs:
   fee_discount: 1.0              # 券商手續費折扣，例如 0.28 = 2.8 折
   tax_rate: 0.003                # 賣出證交稅（現股）
   daytrade_tax_rate: 0.0015      # 現股當沖證交稅減半；target=open_to_close 時每天都是一次當沖
+  short_fee_rate: 0.0008         # 融券借券費（賣出金額的 0.08%）；收盤到收盤放空才有
+  futures:                       # 個股期貨：以現股報酬近似，忽略基差
+    fee_rate: 0.0002             # 手續費按口計，這裡換算成契約金額的比例（約 0.02%），依券商與股價自己改
+    tax_rate: 0.00002            # 期交稅十萬分之二
 
 llm:
   model: claude-opus-5-5         # 想省錢可改 claude-haiku-4-5，並把 effort 設成 null
