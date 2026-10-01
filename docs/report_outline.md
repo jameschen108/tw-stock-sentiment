@@ -46,7 +46,7 @@
 - 結果：
   - 情緒和當天報酬相關 0.08–0.19，「報酬 → 情緒」的 Granger 檢定顯著。
   - 加入情緒後，預測隔天漲跌的 AUC 都沒有提升。
-- 預先登記：開發期唯一有跡象的組合（長榮 LLM 情緒 → 隔天盤中報酬），在 2024 年沒有重現（[PREREGISTRATION.md](../PREREGISTRATION.md)）。
+- 預先登記：開發期唯一有跡象的組合（長榮 LLM 情緒 → 隔天盤中報酬），在 2024 年沒有重現（[PREREGISTRATION.md](prereg/PREREGISTRATION.md)）。
 - 小結：量得越準，當天相關越高，但隔天仍然沒有預測力。情緒是在反應股價。
 - 圖：情緒和當天、隔天報酬的相關。表：README 裡的結果表。
 
@@ -57,7 +57,7 @@
   - 看多減看空，5 天差 +0.41%，但差距來自進場收盤就鎖漲跌停的文章；排除之後接近 0。
   - 作者在追漲：發文前 20 天已經漲了 4–5%。
   - 跟著看多文買，扣成本後賠錢。
-- 預先登記：2024 年 H1、H2 都沒通過；事先就知道檢定力很低（看空文只有 57 篇），文中照實說明（[PREREGISTRATION_TARGET.md](../PREREGISTRATION_TARGET.md)）。
+- 預先登記：2024 年 H1、H2 都沒通過；事先就知道檢定力很低（看空文只有 57 篇），文中照實說明（[PREREGISTRATION_TARGET.md](prereg/PREREGISTRATION_TARGET.md)）。
 - 圖：發文前後的累積報酬。
 
 ## 6. 研究三：開盤前討論量 → 當天成交量（主要發現）
@@ -71,7 +71,7 @@
 - 開發期：
   - 只控制夜盤時，台積電成交量的 MSE 降 3.96%；加入 ADR 後剩 0.96%，約 3/4 是在轉述 ADR 的隔夜變動。
   - 補上漲跌停、處置股、除權息等控制變數後，結果不變。
-- 兩次樣本外檢定：2024 年 H1 CW t = 3.76；2025–26 年 CW t = 2.94，而且三檔各自通過（[PREREGISTRATION_VOLUME.md](../PREREGISTRATION_VOLUME.md)、[PREREGISTRATION_VOLUME_REPLICATION.md](../PREREGISTRATION_VOLUME_REPLICATION.md)）。
+- 兩次樣本外檢定：2024 年 H1 CW t = 3.76；2025–26 年 CW t = 2.94，而且三檔各自通過（[PREREGISTRATION_VOLUME.md](prereg/PREREGISTRATION_VOLUME.md)、[PREREGISTRATION_VOLUME_REPLICATION.md](prereg/PREREGISTRATION_VOLUME_REPLICATION.md)）。
 - 解讀：加入開盤跳空後仍然顯著，所以不只是隔夜消息的回音，比較像是散戶關注度帶動的成交量。
 - 效果大小：MSE 降 0.5–3%；討論量多 1 個標準差，成交量多約 4–10%。
 - 表：開發期 → 2024 → 2025–26 的對照。圖：各檔在兩段期間的增量。
