@@ -8,7 +8,7 @@
 
 | 研究 | 問題 | 結論 | 預先登記 |
 |---|---|---|---|
-| 一、每日情緒 | 能預測隔天報酬嗎？ | **不能**。情緒在反應已發生的股價；開發期唯一的跡象在 2024 沒有重現 | [PREREGISTRATION.md](docs/prereg/PREREGISTRATION.md) |
+| 一、每日情緒 | 能預測隔天報酬嗎？ | **不能**。情緒在反應已發生的股價；開發期唯一的跡象在 2024 沒有重現；預測報酬、照正負號做多空也一樣 | [PREREGISTRATION.md](docs/prereg/PREREGISTRATION.md) |
 | 二、[標的] 文 | 作者自標的多空能預測之後的報酬嗎？ | **不能**。作者在追漲，小差距來自漲跌停鎖住的延續，跟著看多文買扣成本後賠錢 | [PREREGISTRATION_TARGET.md](docs/prereg/PREREGISTRATION_TARGET.md) |
 | 三、開盤前討論量 | 收盤後到開盤前的討論量能預測當天成交量嗎？ | **能**，但效果小（樣本外 MSE 降 0.5–3%）；2024 與 2025–2026 兩次樣本外檢定都通過 | [PREREGISTRATION_VOLUME.md](docs/prereg/PREREGISTRATION_VOLUME.md)、[重複驗證](docs/prereg/PREREGISTRATION_VOLUME_REPLICATION.md) |
 
@@ -43,6 +43,7 @@ python scripts/03_build_features.py       # 每日特徵＋預測目標
 python scripts/04_analyze.py              # 相關、Granger、迴歸、事件研究
 python scripts/05_predict.py              # 滾動式預測＋回測
 python scripts/06_prereg_test.py --final  # 預先登記的 2024 檢定（已跑過，不要再跑）
+python scripts/13_return_predict.py       # 預測報酬與漲跌、照正負號多空；--period 2024 是補充（已跑過）
 
 # 研究二：[標的] 事件研究
 python scripts/fetch_prices.py --market twse   # 全市場日行情，約 3.5 小時；研究三的重複驗證另加 --end 2026-09-24
@@ -61,8 +62,8 @@ python scripts/11_volume_prereg.py --final      # 2024 最終測試（已跑過�
 python scripts/12_volume_replication.py --final # 2025-01 .. 2026-09 重複驗證（已跑過，不要再跑）
 ```
 
-- 步驟 2–5 可加 `--ticker`、`--method`（`lexicon` / `classifier_weak` / `classifier_llm` / `classifier_llm_pooled` / `classifier_bert`）；
-  步驟 3–5 可加 `--target open_to_close` 改預測隔天開盤到收盤，結果存在 `*_oc`。分類器的訓練見 [docs/sentiment.md](docs/sentiment.md)。
+- 步驟 2–5 與 13 可加 `--ticker`、`--method`（`lexicon` / `classifier_weak` / `classifier_llm` / `classifier_llm_pooled` / `classifier_bert`）；
+  步驟 3–5 與 13 可加 `--target open_to_close` 改預測隔天開盤到收盤，結果存在 `*_oc`。分類器的訓練見 [docs/sentiment.md](docs/sentiment.md)。
 - LLM 標註要在專案根目錄的 `.env`（已 gitignore）寫 `ANTHROPIC_API_KEY=...`。
 - 結果在 `output/{代號}/{方法}/`，中間產物在 `data/`，兩者都不進 git。
 
@@ -115,6 +116,45 @@ python scripts/12_volume_replication.py --final # 2025-01 .. 2026-09 重複驗�
 | H1 情緒迴歸係數 > 0 | +0.0084，p = 0.014 | −0.0048，p = 0.69 | 未通過 |
 | H2 低情緒日隔天盤中報酬較低 | −59.6 vs −1.4 bp，p = 0.003 | −4.8 vs −21.7 bp（相反），p = 0.73 | 未通過 |
 | H3 低情緒日放空當沖扣成本後賺錢 | +7.3% | −36.0% | 未通過 |
+
+### 預測報酬與多空
+
+前面只預測漲不漲、只做多。這裡改成同時預測報酬和漲跌，照預測的正負號做多空：預測 > 0 收盤買進，< 0 放空（`13_return_predict.py`）。
+
+- **模型**：特徵與滾動訓練同上。預測報酬用 ridge（懲罰在訓練窗內以時間序列交叉驗證選）與不縮減的 OLS；預測漲跌用 logit，平盤日不放進訓練。
+  ridge 幾乎每次都選到懲罰上限，預測只剩歷史平均，永遠 > 0，多空等於買進持有。OLS 是看到這個結果後才加的，用來讓正負號真的會變。
+- **成本**：現股（收盤到收盤放空要融券，多付 0.08% 借券費；當沖先賣後買不用）與個股期貨（手續費約 0.02% 加期交稅十萬分之二）兩種。
+- **另外報的數字**：
+  - 損益兩平成本：毛利 ÷ 成交金額。
+  - 隨機基準：把部位隨機打亂、多空天數不變，看實際毛報酬贏過幾成的隨機部位。
+  - 門檻變化：預測報酬超過成本才進場，門檻事先定好。
+
+開發期 2019–2023（BERT 情緒，B 組）。基準在 cc 是買進持有；oc 是每天放空，因為三檔的盤中報酬平均都是負的。
+
+| | 樣本外 R²（OLS） | CW t（OLS） | AUC 差 | 現股：基準／OLS 多空／logit 多空 | 期貨：基準／OLS 多空／logit 多空 | 損益兩平 vs 實際成本（logit） |
+|---|---|---|---|---|---|---|
+| 2330 cc | −4.2% | −0.27 | −0.014 [−0.036, +0.002] | +87%／−92%／−83% | +87%／−51%／−15% | 0.02% vs 0.31% |
+| 2330 oc | −3.8% | −0.38 | −0.006 [−0.028, +0.008] | −98%／−99%／−98% | +5%／−48%／+6% | 0.03% vs 0.22% |
+| 2603 cc | −3.7% | −0.47 | −0.008 [−0.019, +0.002] | +1287%／−33%／−56% | +1289%／+302%／+16% | 0.25% vs 0.31% |
+| 2603 oc | −2.9% | −1.03 | −0.002 [−0.014, +0.009] | −95%／−99%／−99% | +116%／−61%／−58% | −0.00% vs 0.22% |
+| 2317 cc | −2.6% | −0.96 | +0.007 [−0.024, +0.033] | +39%／−94%／−90% | +40%／−26%／−22% | 0.00% vs 0.31% |
+| 2317 oc | −1.6% | −1.35 | −0.006 [−0.037, +0.016] | −97%／−98%／−98% | +23%／−24%／−19% | 0.02% vs 0.22% |
+
+1. **預測不了報酬**：OLS 的樣本外 R² 全部是負的，比直接用歷史平均還差；ridge 縮到只剩歷史平均，R² 在 ±0.5% 以內。
+   加入情緒後，Clark–West t 最高 1.46（ridge），AUC 差的信賴區間都含 0。
+2. **照正負號多空，現股全部大賠**：12 個組合（6 組 × OLS、logit）都賠 33–99%，收盤到收盤全部輸給買進持有。
+   每換手一塊錢的毛利大多不到 0.05%，實際成本是 0.22–0.31%。
+   唯一超過成本的是 2603 cc 的 OLS（0.35% 對 0.31%），但長榮波動大，複利下仍然賠 33%。
+3. **成本降到期貨的水準也不夠**：表中的 B 組在收盤到收盤全部輸給買進持有；盤中只有 2330 logit 小贏每天放空（+6% 對 +5%）。
+4. **贏不過隨機部位**：36 個多空組合（含 A 組、ridge）中，毛報酬贏過 95% 同比例隨機部位的只有 1 個，5% 的顯著水準下本來就預期會有約 2 個。
+   這個是 2317 oc 只用量價的 logit，不是 PTT 的貢獻（見[可以往哪裡做](#可以往哪裡做)第 6 點）。
+5. **門檻變化**：現股成本下，ridge 的預測幾乎從來沒超過門檻；OLS 的換手少很多，但收盤到收盤仍然輸給買進持有。
+
+2024（研究一已經用過，不是預先登記；程式在跑 2024 之前就 commit 了）的結論相同：
+- 加入情緒後 CW t 最高 1.46，AUC 差的信賴區間都含 0。
+- 現股多空 12 組中 11 組虧損，唯一賺錢的是 2603 cc logit（+3%），買進持有則是 +57%。
+
+完整的表在 [docs/sentiment.md](docs/sentiment.md#預測報酬與多空)。
 
 ## 研究二：[標的] 文當作個股推薦
 
@@ -181,6 +221,8 @@ python scripts/12_volume_replication.py --final # 2025-01 .. 2026-09 重複驗�
    聯電、陽明、中鋼、友達只有 2021 前後夠多，其他幾乎都 ≤ 5 則，「統一」「南亞」「大成」「華電」這類簡稱又大多撞名。
    逐日的 panel 做不起來，要改成週頻，或以討論量暴增的日子做跨股票的事件研究。
 5. **新的樣本外資料**：用 2026-10 以後的資料再驗證一次。
+6. **2317 盤中的量價訊號**：只用量價的 logit 預測鴻海隔天盤中漲跌，毛報酬在開發期贏過 96% 的隨機部位，2024 是 97%；
+   期貨成本下多空 +64%、+16%，同期每天放空是 +23%、−27%。這是 36 組裡挑出來的，而且和 PTT 無關，要用 2026-10 以後的資料預先登記再測。
 
 ## 目錄
 
@@ -193,14 +235,14 @@ src/pttsent/
   sentiment/          lexicon / weak_labels / classifier / bert / llm_label
   features.py         每日特徵與預測目標、開發期／最終測試期切分
   analysis.py         相關、Granger、HAC 迴歸、事件研究
-  models.py           滾動式預測、基準、AUC 差異的 bootstrap 信賴區間
-  backtest.py         含成本回測（含當沖、放空當沖、低情緒日規則）
+  models.py           滾動式預測（logit、ridge、OLS）、基準、樣本外 R²、AUC 差異的 bootstrap 信賴區間
+  backtest.py         含成本回測（多空、當沖、融券與期貨成本、門檻、損益兩平、隨機基準）
   plots.py            圖表
   panel.py            全市場日價面板（上市＋上櫃、還原、漲跌停、大盤）
   events.py           [標的] 文合併、股票代號解析、進場時間對齊
   event_study.py      異常報酬、雙向叢集標準誤、日曆時間組合
   volume.py           開盤前討論量、夜盤與美股對齊、滾動 OLS、Clark–West 檢定
-scripts/              01–06 研究一；07–10、fetch_prices.py、build_panel.py 研究二；11、12、fetch_us.py 研究三；
+scripts/              01–06、13 研究一；07–10、fetch_prices.py、build_panel.py 研究二；11、12、fetch_us.py 研究三；
                       train_classifier.py、llm_label.py 訓練情緒分類器
 tests/                時間對齊、不偷看未來、成本等不變量
 docs/
