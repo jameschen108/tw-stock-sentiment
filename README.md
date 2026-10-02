@@ -44,6 +44,7 @@ python scripts/04_analyze.py              # 相關、Granger、迴歸、事件�
 python scripts/05_predict.py              # 滾動式預測＋回測
 python scripts/06_prereg_test.py --final  # 預先登記的 2024 檢定（已跑過，不要再跑）
 python scripts/13_return_predict.py       # 預測報酬與漲跌、照正負號多空；--period 2024 是補充（已跑過）
+python scripts/14_explore_directions.py   # 探索：週頻、情緒極端、超額報酬（只用開發期）
 
 # 研究二：[標的] 事件研究
 python scripts/fetch_prices.py --market twse   # 全市場日行情，約 3.5 小時；研究三的重複驗證另加 --end 2026-09-24
@@ -216,7 +217,8 @@ python scripts/12_volume_replication.py --final # 2025-01 .. 2026-09 重複驗�
    （樣本外 MSE 變化 2330 −0.2%、2603 +0.1%、2317 +0.4%，信賴區間都含 0；樣本內 2603 的 t = 3.2 是 2021 航運熱潮時發文多、波動大同時發生）；
    改用收盤後到開盤前的討論量才有了（研究三）。也可以試 5 日報酬或相對大盤的超額報酬。
 2. **加控制變數**：情緒模型還沒加新聞量與夜盤，三大法人都還沒用；研究三還沒控制長榮的運價、鴻海的蘋果與輝達、法說會與月營收公布日。
-3. **降低交易頻率**：只在情緒極端時進場，或改成週頻，才可能撐過交易成本。
+3. **降低交易頻率**：已試過週頻、只在情緒極端時進場、預測相對大盤的超額報酬，12 個事先定好的檢定在 FDR 校正後都沒通過
+   （[docs/explore_directions.md](docs/explore_directions.md)）。
 4. **更多股票**：掃過 301 檔，2019–2023 每交易日討論量中位數 ≥ 20 則的只有 2330、2603、2317；
    聯電、陽明、中鋼、友達只有 2021 前後夠多，其他幾乎都 ≤ 5 則，「統一」「南亞」「大成」「華電」這類簡稱又大多撞名。
    逐日的 panel 做不起來，要改成週頻，或以討論量暴增的日子做跨股票的事件研究。
@@ -242,11 +244,13 @@ src/pttsent/
   events.py           [標的] 文合併、股票代號解析、進場時間對齊
   event_study.py      異常報酬、雙向叢集標準誤、日曆時間組合
   volume.py           開盤前討論量、夜盤與美股對齊、滾動 OLS、Clark–West 檢定
-scripts/              01–06、13 研究一；07–10、fetch_prices.py、build_panel.py 研究二；11、12、fetch_us.py 研究三；
+  explore.py          週頻資料、情緒極端日、極端日報酬差檢定、對沖後的超額報酬
+scripts/              01–06、13、14 研究一；07–10、fetch_prices.py、build_panel.py 研究二；11、12、fetch_us.py 研究三；
                       train_classifier.py、llm_label.py 訓練情緒分類器
 tests/                時間對齊、不偷看未來、成本等不變量
 docs/
   sentiment.md        研究一的細節（文字歸屬、LLM 標註、分類器與 BERT 的準確度、回測與補充結果）
+  explore_directions.md  週頻、情緒極端、超額報酬的探索計畫與結果
   report_outline.md   專題報告大綱
   prereg/             四份預先登記與結果：研究一、研究二、研究三、研究三的重複驗證
 ```
