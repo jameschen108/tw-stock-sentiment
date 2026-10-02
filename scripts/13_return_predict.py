@@ -28,26 +28,9 @@ from pttsent.backtest import (backtest, cost_model, random_sign_pctile, signal_p
                               trade_stats)
 from pttsent.config import METHODS, TARGETS, load_config, output_path, target_suffix, work_path  # noqa: E402
 from pttsent.features import period  # noqa: E402
-from pttsent.models import (FEATURE_SETS, auc_diff_ci, direction, hist_mean, metrics,  # noqa: E402
-                            regression_metrics, walk_forward)
+from pttsent.models import (MODEL_SETS as MODELS, REG_KINDS as REG, auc_diff_ci, direction,  # noqa: E402
+                            metrics, predict_all, regression_metrics)
 from pttsent.volume import cw_loss, mean_test  # noqa: E402
-
-MODELS = {"A": "A_price", "B": "B_price_sent"}
-REG = ["ridge", "ols"]
-
-
-def predict(df: pd.DataFrame, cfg) -> pd.DataFrame:
-    df = df.assign(dir_next=direction(df["ret_next"]))
-    kw = dict(min_train=cfg["split"]["min_train_days"], refit_every=cfg["split"]["refit_every"])
-    cols = {}
-    for k, name in MODELS.items():
-        feats = FEATURE_SETS[name]
-        for kind in REG:
-            cols[f"{k}_{kind}"] = walk_forward(df, feats, kind, target="ret_next", **kw)["pred"]
-        cols[f"{k}_logit"] = walk_forward(df, feats, "logit", target="dir_next", **kw)["prob"]
-    out = pd.DataFrame(cols).dropna()
-    out["hist_mean"] = hist_mean(df["ret_next"]).reindex(out.index)
-    return out
 
 
 def main():
@@ -67,7 +50,7 @@ def main():
     daily = pd.read_parquet(work_path(cfg, "processed", f"daily_{ticker}_{method}{suffix}.parquet"))
     final = a.period == "2024"
     df = period(daily, cfg, final)
-    p = predict(df, cfg)
+    p = predict_all(df, "ret_next", cfg["split"]["min_train_days"], cfg["split"]["refit_every"])
     if final:
         p = p[p.index >= pd.Timestamp(cfg["split"]["final_test_start"])]
     p.to_csv(out("predictions.csv"))

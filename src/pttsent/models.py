@@ -16,6 +16,8 @@ from sklearn.preprocessing import StandardScaler
 from .features import PRICE_FEATURES, SENT_FEATURES
 
 FEATURE_SETS = {"A_price": PRICE_FEATURES, "B_price_sent": PRICE_FEATURES + SENT_FEATURES}
+MODEL_SETS = {"A": "A_price", "B": "B_price_sent"}
+REG_KINDS = ["ridge", "ols"]
 
 
 def make_model(kind: str):
@@ -130,3 +132,22 @@ def regression_metrics(y: pd.Series, pred: pd.Series, bench: pd.Series) -> dict:
             "ic": ic, "ic_p": ic_p,
             "sign_acc": (np.sign(nz["p"]) == np.sign(nz["y"])).mean(),
             "pred_pos": (m["p"] > 0).mean(), "pred_sd": m["p"].std()}
+
+
+def predict_all(df: pd.DataFrame, target: str = "ret_next", min_train: int = 250,
+                refit_every: int = 21) -> pd.DataFrame:
+    """A/B × ridge、OLS（預測 target）與 logit（預測 target 的正負，平盤不訓練）。
+
+    只留所有模型都有預測的列，另附歷史平均（迴歸的基準）。欄位：A_ridge、A_ols、A_logit、B_…、hist_mean。
+    """
+    df = df.assign(_dir=direction(df[target]))
+    kw = dict(min_train=min_train, refit_every=refit_every)
+    cols = {}
+    for k, name in MODEL_SETS.items():
+        feats = FEATURE_SETS[name]
+        for kind in REG_KINDS:
+            cols[f"{k}_{kind}"] = walk_forward(df, feats, kind, target=target, **kw)["pred"]
+        cols[f"{k}_logit"] = walk_forward(df, feats, "logit", target="_dir", **kw)["prob"]
+    out = pd.DataFrame(cols).dropna()
+    out["hist_mean"] = hist_mean(df[target]).reindex(out.index)
+    return out

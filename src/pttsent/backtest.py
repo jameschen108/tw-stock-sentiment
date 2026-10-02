@@ -81,15 +81,16 @@ def low_sentiment_days(sent_mean: pd.Series, window: int = 250, q: float = 0.4,
     return (sent_mean <= cut) & sent_mean.notna()
 
 
-def summary(bt: pd.DataFrame) -> dict:
+def summary(bt: pd.DataFrame, periods: int = 252) -> dict:
+    """periods = 一年有幾期（日頻 252、週頻 52），用來年化。"""
     net = bt["net"]
-    years = len(net) / 252
+    years = len(net) / periods
     eq = bt["equity"]
     return {
         "total_return": eq.iloc[-1] - 1,
         "cagr": eq.iloc[-1] ** (1 / years) - 1 if years > 0 else np.nan,
-        "ann_vol": net.std() * np.sqrt(252),
-        "sharpe": net.mean() / net.std() * np.sqrt(252) if net.std() > 0 else np.nan,
+        "ann_vol": net.std() * np.sqrt(periods),
+        "sharpe": net.mean() / net.std() * np.sqrt(periods) if net.std() > 0 else np.nan,
         "max_drawdown": (eq / eq.cummax() - 1).min(),
         "exposure": bt["position"].abs().mean(),
         "n_trades": int(bt["trade"].sum()),
