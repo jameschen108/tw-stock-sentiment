@@ -1,256 +1,269 @@
-# PTT 情緒與台股走勢
+# PTT Sentiment and Taiwan Stocks
 
-畢業專題：檢驗 PTT Stock 板的內容能不能提供量價以外的資訊。
-核心問題不是「能不能預測股價」，而是**加入 PTT 之後，比只用量價的模型好多少？**
-三個研究都先在開發期探索，再把假設預先登記，在沒看過的期間只測一次。
+[中文版](README.zh-TW.md)
 
-## 結論
+My individual part of a five-person undergraduate capstone at Soochow University. The team studies Taiwan stocks with different methods, and the advisor asked us to work individually first.
 
-| 研究 | 問題 | 結論 | 預先登記 |
+The project tests whether the Stock board on PTT, Taiwan's largest bulletin board system, carries information beyond price and volume.
+The question I care about is how much a price-and-volume model improves once PTT is added.
+I explored each of the three studies on a development period first, then preregistered its hypotheses and tested them once on a period I had not looked at.
+
+## Results
+
+| Study | Question | Answer | Preregistration |
 |---|---|---|---|
-| 一、每日情緒 | 能預測隔天報酬嗎？ | **不能**。情緒在反應已發生的股價；開發期唯一的跡象在 2024 沒有重現；預測報酬、照正負號做多空也一樣 | [PREREGISTRATION.md](docs/prereg/PREREGISTRATION.md) |
-| 二、[標的] 文 | 作者自標的多空能預測之後的報酬嗎？ | **不能**。作者在追漲，小差距來自漲跌停鎖住的延續，跟著看多文買扣成本後賠錢 | [PREREGISTRATION_TARGET.md](docs/prereg/PREREGISTRATION_TARGET.md) |
-| 三、開盤前討論量 | 收盤後到開盤前的討論量能預測當天成交量嗎？ | **能**，但效果小（樣本外 MSE 降 0.5–3%）；2024 與 2025–2026 兩次樣本外檢定都通過 | [PREREGISTRATION_VOLUME.md](docs/prereg/PREREGISTRATION_VOLUME.md)、[重複驗證](docs/prereg/PREREGISTRATION_VOLUME_REPLICATION.md) |
+| 1. Daily sentiment | Does it predict next-day returns? | **No.** Sentiment reacts to prices that have already moved; the only hint in the development period did not recur in 2024; predicting returns and going long-short on the sign fails as well | [PREREGISTRATION.md](docs/prereg/PREREGISTRATION.md) |
+| 2. [標的] posts | Do the long/short calls authors declare predict later returns? | **No.** Authors chase rallies; the small gap comes from continuation after limit-locked closes, and buying on bullish posts loses money after costs | [PREREGISTRATION_TARGET.md](docs/prereg/PREREGISTRATION_TARGET.md) |
+| 3. Pre-open discussion volume | Does discussion between the close and the next open predict that day's trading volume? | **Yes**, but the effect is small (out-of-sample MSE down 0.5-3%); passed both out-of-sample tests, 2024 and 2025-2026 | [PREREGISTRATION_VOLUME.md](docs/prereg/PREREGISTRATION_VOLUME.md), [replication](docs/prereg/PREREGISTRATION_VOLUME_REPLICATION.md) |
 
-一句話：PTT 反映的是已經發生的價格，但能預告當天會不會比較熱。
-這份 README 只留主要數字，研究一的細節在 [docs/sentiment.md](docs/sentiment.md)，研究二、三的細節在各自的[預先登記文件](docs/prereg/)。
+PTT reflects prices that have already moved, but it does signal whether the day will be busier than usual.
+Details for study 1 are in [docs/sentiment.md](docs/sentiment.md), and for studies 2 and 3 in their [preregistration documents](docs/prereg/). Everything under `docs/` is in Chinese.
 
-## 資料
+## Terms
 
-原始資料讀自共用資料夾 `/Users/jameschen/Project/data`（唯讀，可用環境變數 `PTT_DATA_DIR` 改位置）：
+- **PTT**: Taiwan's largest bulletin board system. The Stock board is its stock discussion board; comments under a post are called pushes (推文).
+- **[標的] posts**: the Stock board's format for single-stock pitches. Board rules require the author to state long or short.
+- **Price limit (漲跌停)**: a Taiwan stock can move at most ±10% a day. When the close is locked at the limit, orders usually cannot be filled.
+- **Disposition stocks (處置股)**: stocks the exchange puts under trading restrictions after abnormal trading.
+- **Day trade (當沖)**: buying and selling the same stock on the same day. A sell-first day trade needs no securities borrowing.
+- **Tickers**: 2330 TSMC, 2603 Evergreen Marine, 2317 Hon Hai (Foxconn), 0050 Yuanta Taiwan 50 ETF.
 
-| 用途 | 路徑 | 說明 |
+## Data
+
+Raw data is not in this repo. The code reads it from a local folder, `/Users/jameschen/Project/data` (read-only; set the environment variable `PTT_DATA_DIR` to point elsewhere):
+
+| Use | Path | Notes |
 |---|---|---|
-| PTT 文章與推文 | `pttcc/stock_{年}.jsonl` | 2019–2024：15.8 萬篇、1,563 萬則推文；2025–2026/09/26：4.5 萬篇、556 萬則（只用在研究三的重複驗證） |
-| PTT [標的] 文 | pttweb | 2015/04–2025/01，含被刪的文章（研究二） |
-| 個股日價、大盤 | `raw/finmind/price/`、`raw/twse_taiex/` | 267 檔 + 0050，2014–2025/03（研究一） |
-| 除權息、處置股 | `raw/twse_exrights/`、`raw/twse_punish/` | 還原報酬、研究三的控制變數 |
-| 鉅亨新聞、台指期 | `raw/cnyes/headline/`、`raw/taifex_tx/` | 研究三的控制變數、研究二的探索性分析 |
+| PTT posts and comments | `pttcc/stock_{year}.jsonl` | 2019-2024: 158k posts, 15.63M comments; 2025 to 2026/09/26: 45k posts, 5.56M comments (used only in the study 3 replication) |
+| PTT [標的] posts | pttweb | 2015/04 to 2025/01, including deleted posts (study 2) |
+| Daily stock prices, market index | `raw/finmind/price/`, `raw/twse_taiex/` | 267 stocks + 0050, 2014 to 2025/03 (study 1) |
+| Ex-rights/ex-dividend, disposition stocks | `raw/twse_exrights/`, `raw/twse_punish/` | Return adjustment; controls in study 3 |
+| cnyes news, TAIEX futures | `raw/cnyes/headline/`, `raw/taifex_tx/` | Controls in study 3; exploratory analysis in study 2 |
 
-研究二、三另外用自己下載的全市場日價面板（證交所＋櫃買，2015–2026/09，含已下市與減資還原）和美股資料（TSM、^SOX），存在 `data/prices/`。
-面板和 FinMind 的 267 檔比對，61 萬個檔日的收盤全部一致；報酬只有 38 筆不同，都是原本用 FinMind 的流程漏掉上櫃期間的除息。
+Studies 2 and 3 also use a full-market daily price panel I downloaded myself (TWSE + TPEx, 2015 to 2026/09, including delisted stocks and adjusted for capital reductions) and US data (TSM, ^SOX), stored in `data/prices/`.
+Against FinMind's 267 stocks, closing prices match on all 610k stock-days. Returns differ in only 38 cases, all ex-dividend adjustments during a stock's TPEx-listed period that the original FinMind pipeline missed.
 
-## 執行
+## Running
 
 ```bash
 pip install -r requirements.txt
-python -m pytest                          # 時間對齊、不偷看未來、成本計算
+python -m pytest                          # time alignment, no look-ahead, cost calculations
 
-# 研究一：每日情緒（預設 2330）
-python scripts/01_prepare_ptt.py          # PTT 轉 parquet＋挑出目標股票的文字
-python scripts/02_score_sentiment.py      # 每則文字打情緒分數
-python scripts/03_build_features.py       # 每日特徵＋預測目標
-python scripts/04_analyze.py              # 相關、Granger、迴歸、事件研究
-python scripts/05_predict.py              # 滾動式預測＋回測
-python scripts/06_prereg_test.py --final  # 預先登記的 2024 檢定（已跑過，不要再跑）
-python scripts/13_return_predict.py       # 預測報酬與漲跌、照正負號多空；--period 2024 是補充（已跑過）
-python scripts/14_explore_directions.py   # 探索：週頻、情緒極端、超額報酬（只用開發期）
+# Study 1: daily sentiment (default 2330)
+python scripts/01_prepare_ptt.py          # PTT to parquet + extract texts about the target stock
+python scripts/02_score_sentiment.py      # sentiment score for each text
+python scripts/03_build_features.py       # daily features + prediction targets
+python scripts/04_analyze.py              # correlation, Granger, regression, event study
+python scripts/05_predict.py              # rolling prediction + backtest
+python scripts/06_prereg_test.py --final  # preregistered 2024 test (run once already; do not rerun)
+python scripts/13_return_predict.py       # predict return and direction, long-short on the sign; --period 2024 is supplementary (run already)
+python scripts/14_explore_directions.py   # exploration: weekly, extreme sentiment, excess return (development period only)
 
-# 研究二：[標的] 事件研究
-python scripts/fetch_prices.py --market twse   # 全市場日行情，約 3.5 小時；研究三的重複驗證另加 --end 2026-09-24
-python scripts/fetch_prices.py --market tpex   # 可以同時跑
-python scripts/build_panel.py                  # 全市場面板＋驗證
-python scripts/07_target_events.py             # [標的] 文 -> 事件表
-python scripts/08_target_dev.py                # 開發期 2016–2023
-python scripts/09_target_explore.py            # 探索性分析（FDR 校正）
-python scripts/10_target_prereg.py --final     # 2024 最終測試（已跑過，不要再跑）
+# Study 2: [標的] event study
+python scripts/fetch_prices.py --market twse   # full-market daily quotes, about 3.5 hours; add --end 2026-09-24 for the study 3 replication
+python scripts/fetch_prices.py --market tpex   # can run in parallel
+python scripts/build_panel.py                  # full-market panel + validation
+python scripts/07_target_events.py             # [標的] posts -> event table
+python scripts/08_target_dev.py                # development period 2016–2023
+python scripts/09_target_explore.py            # exploratory analysis (FDR-corrected)
+python scripts/10_target_prereg.py --final     # 2024 final test (run once already; do not rerun)
 
-# 研究三：開盤前討論量與成交量
-python scripts/fetch_us.py                                  # TSM、^SOX，到 2025-06
-python scripts/fetch_us.py --end 2026-09-27 --out us_2026   # 重複驗證用，另存不覆蓋
-python scripts/11_volume_prereg.py              # 開發期 2019–2023
-python scripts/11_volume_prereg.py --final      # 2024 最終測試（已跑過，不要再跑）
-python scripts/12_volume_replication.py --final # 2025-01 .. 2026-09 重複驗證（已跑過，不要再跑）
+# Study 3: pre-open discussion volume and trading volume
+python scripts/fetch_us.py                                  # TSM, ^SOX, through 2025-06
+python scripts/fetch_us.py --end 2026-09-27 --out us_2026   # for the replication, saved separately without overwriting
+python scripts/11_volume_prereg.py              # development period 2019–2023
+python scripts/11_volume_prereg.py --final      # 2024 final test (run once already; do not rerun)
+python scripts/12_volume_replication.py --final # 2025-01 .. 2026-09 replication (run once already; do not rerun)
 ```
 
-- 步驟 2–5 與 13 可加 `--ticker`、`--method`（`lexicon` / `classifier_weak` / `classifier_llm` / `classifier_llm_pooled` / `classifier_bert`）；
-  步驟 3–5 與 13 可加 `--target open_to_close` 改預測隔天開盤到收盤，結果存在 `*_oc`。分類器的訓練見 [docs/sentiment.md](docs/sentiment.md)。
-- LLM 標註要在專案根目錄的 `.env`（已 gitignore）寫 `ANTHROPIC_API_KEY=...`。
-- 結果在 `output/{代號}/{方法}/`，中間產物在 `data/`，兩者都不進 git。
+- Steps 2-5 and 13 accept `--ticker` and `--method` (`lexicon` / `classifier_weak` / `classifier_llm` / `classifier_llm_pooled` / `classifier_bert`).
+  Steps 3-5 and 13 accept `--target open_to_close`, which predicts next-day open-to-close instead and writes results to `*_oc`. Classifier training is described in [docs/sentiment.md](docs/sentiment.md).
+- LLM labelling needs `ANTHROPIC_API_KEY=...` in `.env` at the project root (gitignored).
+- Results go to `output/{ticker}/{method}/` and intermediate files to `data/`; neither is in git.
 
-## 共通設計
+## Shared design
 
-- **哪些文字算在討論這檔股票**（`ptt.py`）：標題提到代號或別名的文章與整串留言，加上本身提到的留言。
-  只在內文提到的不算（大多是範本或順帶一提）；別名會撞到別家公司時，`config.yaml` 的 `exclude` 先把那些詞刪掉（例如長榮航）。
-- **時間對齊**（`calendar.py`）：13:30 收盤前的貼文算當天，之後、週末、假日算下一個交易日。第 t 天的特徵只用 t 天收盤前看得到的貼文；`--target open_to_close` 時改以 09:00 切日，收到 t+1 開盤前。
-- **報酬**（`prices.py`）：除權息日用參考價還原；超過漲跌幅限制、無法還原的報酬設成缺值。
-- **驗證**：開發期和最終測試期分開；假設、門檻與檢定程式先 commit，最終測試只跑一次，結果不論好壞都照實記錄。
-  2024 與 2025-01 .. 2026-09 都已經用掉了，新的想法要用 2026-10 以後的資料驗證。
+- Which texts count as discussing a stock (`ptt.py`): posts whose title mentions the ticker or an alias, with their whole comment thread, plus comments that mention it themselves.
+  A mention only in the body does not count, since those are mostly templates or passing references. When an alias collides with another company, `exclude` in `config.yaml` removes those words first (for Evergreen Marine, 長榮航, EVA Air).
+- Time alignment (`calendar.py`): a post before the 13:30 close counts toward that day; later posts, weekends and holidays count toward the next trading day. Features for day t use only posts visible before day t's close. With `--target open_to_close` the day is cut at 09:00 instead, so features run up to the open of t+1.
+- Returns (`prices.py`): adjusted with reference prices on ex-rights/ex-dividend dates. Returns beyond the price limit that cannot be adjusted are set to missing.
+- Validation: development and final test periods are kept separate. I commit the hypotheses, thresholds and test code first, run the final test once, and record the result whichever way it goes.
+  2024 and 2025-01 to 2026-09 have both been used up, so new ideas have to be tested on data from 2026-10 onward.
 
-## 研究一：每日情緒 → 隔天報酬
+## Study 1: daily sentiment and next-day returns
 
-- **每日情緒**（`features.py`）：同一帳號當天先平均再跨帳號平均，避免洗版；沒有情緒訊號的日子是缺值，不是 0。
-- **情緒量法**：詞典、弱標籤分類器（[標的] 文自填的多空當標籤）、LLM 標註（Claude Opus 5.5）訓練的 TF-IDF 分類器、同一批標籤微調的 BERT。
-  BERT 在測試集的 macro-F1 0.550，TF-IDF 0.495；在沒參與訓練的 2317 上是 0.519 對 0.440。細節見 [docs/sentiment.md](docs/sentiment.md)。
-- **預測**（`models.py`）：預測明天漲不漲。A 組只用量價、B 組加情緒，logistic regression（C=0.01），每 21 個交易日只用過去資料重訓。
-- **回測**（`backtest.py`）：預測漲就持有，扣手續費與證交稅；開盤到收盤時每天都是一次當沖。
+- Daily sentiment (`features.py`): averaged within each account for the day first, then across accounts, so that spamming accounts do not dominate. A day with no sentiment signal is missing, not 0.
+- Sentiment measures: a lexicon; a weak-label classifier, whose labels are the long/short that [標的] authors declare; a TF-IDF classifier trained on LLM labels (Claude Opus 5.5); and BERT fine-tuned on the same labels.
+  BERT reaches macro-F1 0.550 on the test set against 0.495 for TF-IDF, and 0.519 against 0.440 on 2317, which was not used in training. Details in [docs/sentiment.md](docs/sentiment.md).
+- Prediction (`models.py`): predict whether tomorrow is up. Group A uses price and volume only; group B adds sentiment. Logistic regression (C=0.01), retrained every 21 trading days on past data only.
+- Backtest (`backtest.py`): hold when the model predicts up, net of commissions and securities transaction tax. For open-to-close, every day is a day trade.
 
-開發期 2019–2023；cc = 收盤到收盤，oc = 隔天開盤到收盤。AUC 差是 B − A 的樣本外 AUC（bootstrap 95% CI）；IC 是預測機率和隔天報酬的 Spearman 相關。
+Development period 2019-2023; cc = close to close, oc = next-day open to close. AUC diff is the out-of-sample AUC of B − A with a bootstrap 95% CI. IC is the Spearman correlation between the predicted probability and the next-day return.
 
-| 股票 × 方法 × 目標 | corr(情緒, 當天) | corr(情緒, 目標) | 迴歸情緒 p | Granger 報酬→情緒 p | AUC 差 | IC（A → B） |
+| Stock × method × target | corr(sentiment, same day) | corr(sentiment, target) | Regression p (sentiment) | Granger p, return to sentiment | AUC diff | IC (A → B) |
 |---|---|---|---|---|---|---|
-| 2330 詞典 cc | 0.112 | −0.012 | 0.61 | 0.003 | −0.008 [−0.021, +0.004] | +0.006 → −0.003 |
-| 2330 弱標籤 cc | 0.024 | −0.021 | 0.23 | — | −0.010 [−0.027, +0.006] | +0.006 → −0.002 |
+| 2330 lexicon cc | 0.112 | −0.012 | 0.61 | 0.003 | −0.008 [−0.021, +0.004] | +0.006 → −0.003 |
+| 2330 weak labels cc | 0.024 | −0.021 | 0.23 | — | −0.010 [−0.027, +0.006] | +0.006 → −0.002 |
 | 2330 LLM cc | 0.132 | −0.024 | 0.19 | 0.0001 | +0.001 [−0.014, +0.014] | +0.006 → +0.008 |
-| 2330 LLM 合併 cc | 0.124 | −0.025 | 0.17 | 0.0004 | −0.001 [−0.019, +0.015] | +0.006 → +0.004 |
+| 2330 LLM pooled cc | 0.124 | −0.025 | 0.17 | 0.0004 | −0.001 [−0.019, +0.015] | +0.006 → +0.004 |
 | 2330 BERT cc | **0.194** | 0.001 | 0.88 | <0.0001 | −0.014 [−0.034, +0.006] | +0.006 → −0.013 |
-| 2330 詞典 oc | — | 0.017 | 0.28 | — | −0.006 [−0.023, +0.006] | +0.019 → +0.000 |
+| 2330 lexicon oc | — | 0.017 | 0.28 | — | −0.006 [−0.023, +0.006] | +0.019 → +0.000 |
 | 2330 LLM oc | — | −0.001 | 0.65 | — | −0.005 [−0.024, +0.008] | +0.019 → −0.003 |
-| 2603 詞典 cc | 0.122 | 0.021 | 0.47 | <0.0001 | −0.007 [−0.023, +0.005] | +0.047 → +0.033 |
+| 2603 lexicon cc | 0.122 | 0.021 | 0.47 | <0.0001 | −0.007 [−0.023, +0.005] | +0.047 → +0.033 |
 | 2603 LLM cc | 0.082 | 0.036 | 0.066 | 0.50 | +0.002 [−0.010, +0.017] | +0.047 → +0.051 |
-| 2603 詞典 oc | — | 0.045 | 0.047 | 0.30 | +0.003 [−0.012, +0.017] | +0.013 → +0.014 |
+| 2603 lexicon oc | — | 0.045 | 0.047 | 0.30 | +0.003 [−0.012, +0.017] | +0.013 → +0.014 |
 | **2603 LLM oc** | — | **0.064** | **0.028** | 0.68 | +0.003 [−0.007, +0.014] | +0.013 → +0.016 |
 | 2603 BERT cc | 0.108 | 0.029 | 0.39 | 0.001 | −0.007 [−0.017, +0.001] | +0.047 → +0.037 |
-| 2317 LLM 合併 cc | 0.075 | −0.025 | 0.50 | 0.022 | −0.008 [−0.029, +0.011] | +0.028 → +0.026 |
+| 2317 LLM pooled cc | 0.075 | −0.025 | 0.50 | 0.022 | −0.008 [−0.029, +0.011] | +0.028 → +0.026 |
 | 2317 BERT cc | 0.127 | 0.024 | 0.21 | <0.0001 | +0.000 [−0.022, +0.021] | +0.028 → +0.030 |
 
-1. **情緒在反應股價**：和當天報酬相關 0.075–0.19（弱標籤把 9 成留言判成看多，幾乎量不到東西），「報酬 → 情緒」的 Granger 檢定大多顯著。
-2. **量得越準，當天相關越高，但隔天仍然沒有**：台積電從詞典 0.112 到 BERT 0.194；BERT 每天量到的帳號約多一倍，隔天相關仍在 0 附近。
-3. **沒有預測力**：所有組合加入情緒後 AUC 都沒有顯著提升，回測扣成本後都輸給買進持有。
-   鴻海是看結果之前就選定的新樣本，結果一致。
-4. **唯一的跡象**：2603 LLM oc，低情緒日隔天盤中偏跌、放空當沖扣成本後 +7%，但它是從約 10 種組合中挑出來的。
+1. Sentiment reacts to prices. Its correlation with the same-day return is 0.075-0.19, and the Granger test from return to sentiment is mostly significant. (The weak labels call 90% of comments bullish and measure almost nothing.)
+2. Better measurement raises the same-day correlation, but the next day still shows nothing. For TSMC the same-day correlation rises from 0.112 with the lexicon to 0.194 with BERT, and BERT picks up about twice as many accounts per day, yet the next-day correlation stays near 0.
+3. Adding sentiment does not significantly raise AUC in any combination, and every backtest loses to buy-and-hold after costs.
+   I chose Hon Hai as a new sample before looking at the results, and it agrees.
+4. The only hint is 2603 LLM oc. After low-sentiment days the next day's intraday return leans negative, and short day trades earn +7% after costs, but I picked this out of about 10 combinations.
 
-**2024 最終測試**：
+2024 final test:
 
-| 假設 | 開發期 | 2024 | 判定 |
+| Hypothesis | Development | 2024 | Verdict |
 |---|---|---|---|
-| H1 情緒迴歸係數 > 0 | +0.0084，p = 0.014 | −0.0048，p = 0.69 | 未通過 |
-| H2 低情緒日隔天盤中報酬較低 | −59.6 vs −1.4 bp，p = 0.003 | −4.8 vs −21.7 bp（相反），p = 0.73 | 未通過 |
-| H3 低情緒日放空當沖扣成本後賺錢 | +7.3% | −36.0% | 未通過 |
+| H1 sentiment regression coefficient > 0 | +0.0084, p = 0.014 | −0.0048, p = 0.69 | Failed |
+| H2 lower next-day intraday return after low-sentiment days | −59.6 vs −1.4 bp, p = 0.003 | −4.8 vs −21.7 bp (reversed), p = 0.73 | Failed |
+| H3 short day trades after low-sentiment days profitable after costs | +7.3% | −36.0% | Failed |
 
-### 預測報酬與多空
+### Predicting returns and long-short
 
-前面只預測漲不漲、只做多。這裡改成同時預測報酬和漲跌，照預測的正負號做多空：預測 > 0 收盤買進，< 0 放空（`13_return_predict.py`）。
+The models above only predict direction and only go long. Here they predict both the return and the direction, and take a side on the sign: buy at the close when the forecast is > 0, short when it is < 0 (`13_return_predict.py`).
 
-- **模型**：特徵與滾動訓練同上。預測報酬用 ridge（懲罰在訓練窗內以時間序列交叉驗證選）與不縮減的 OLS；預測漲跌用 logit，平盤日不放進訓練。
-  ridge 幾乎每次都選到懲罰上限，預測只剩歷史平均，永遠 > 0，多空等於買進持有。OLS 是看到這個結果後才加的，用來讓正負號真的會變。
-- **成本**：現股（收盤到收盤放空要融券，多付 0.08% 借券費；當沖先賣後買不用）與個股期貨（手續費約 0.02% 加期交稅十萬分之二）兩種。
-- **另外報的數字**：
-  - 損益兩平成本：毛利 ÷ 成交金額。
-  - 隨機基準：把部位隨機打亂、多空天數不變，看實際毛報酬贏過幾成的隨機部位。
-  - 門檻變化：預測報酬超過成本才進場，門檻事先定好。
+- Models: same features and rolling training as above. Returns come from ridge, with the penalty chosen by time-series cross-validation inside the training window, and from unshrunk OLS. Direction comes from logit, with flat days left out of training.
+  Ridge picks the maximum penalty almost every time, so its forecast collapses to the historical mean. That mean is always > 0, which turns the long-short into buy-and-hold. I added OLS after seeing this, so that the sign can change.
+- Costs, two cases. Stocks: shorting close to close requires securities borrowing, which adds a 0.08% borrowing fee; a sell-first day trade does not. Single-stock futures: commission of about 0.02% plus futures transaction tax of 0.002%.
+- Additional numbers:
+  - Break-even cost: gross profit ÷ traded value.
+  - Random benchmark: shuffle the positions while keeping the number of long and short days fixed, and count what share of the random positions the actual gross return beats.
+  - Threshold variant: trade only when the forecast return exceeds the cost, with the threshold fixed in advance.
 
-開發期 2019–2023（BERT 情緒，B 組）。基準在 cc 是買進持有；oc 是每天放空，因為三檔的盤中報酬平均都是負的。
+Development period 2019-2023, BERT sentiment, group B. The benchmark for cc is buy-and-hold. For oc it is shorting every day, because the average intraday return is negative for all three stocks.
 
-| | 樣本外 R²（OLS） | CW t（OLS） | AUC 差 | 現股：基準／OLS 多空／logit 多空 | 期貨：基準／OLS 多空／logit 多空 | 損益兩平 vs 實際成本（logit） |
+| | Out-of-sample R² (OLS) | CW t (OLS) | AUC diff | Stocks: benchmark / OLS long-short / logit long-short | Futures: benchmark / OLS long-short / logit long-short | Break-even vs actual cost (logit) |
 |---|---|---|---|---|---|---|
-| 2330 cc | −4.2% | −0.27 | −0.014 [−0.036, +0.002] | +87%／−92%／−83% | +87%／−51%／−15% | 0.02% vs 0.31% |
-| 2330 oc | −3.8% | −0.38 | −0.006 [−0.028, +0.008] | −98%／−99%／−98% | +5%／−48%／+6% | 0.03% vs 0.22% |
-| 2603 cc | −3.7% | −0.47 | −0.008 [−0.019, +0.002] | +1287%／−33%／−56% | +1289%／+302%／+16% | 0.25% vs 0.31% |
-| 2603 oc | −2.9% | −1.03 | −0.002 [−0.014, +0.009] | −95%／−99%／−99% | +116%／−61%／−58% | −0.00% vs 0.22% |
-| 2317 cc | −2.6% | −0.96 | +0.007 [−0.024, +0.033] | +39%／−94%／−90% | +40%／−26%／−22% | 0.00% vs 0.31% |
-| 2317 oc | −1.6% | −1.35 | −0.006 [−0.037, +0.016] | −97%／−98%／−98% | +23%／−24%／−19% | 0.02% vs 0.22% |
+| 2330 cc | −4.2% | −0.27 | −0.014 [−0.036, +0.002] | +87% / −92% / −83% | +87% / −51% / −15% | 0.02% vs 0.31% |
+| 2330 oc | −3.8% | −0.38 | −0.006 [−0.028, +0.008] | −98% / −99% / −98% | +5% / −48% / +6% | 0.03% vs 0.22% |
+| 2603 cc | −3.7% | −0.47 | −0.008 [−0.019, +0.002] | +1287% / −33% / −56% | +1289% / +302% / +16% | 0.25% vs 0.31% |
+| 2603 oc | −2.9% | −1.03 | −0.002 [−0.014, +0.009] | −95% / −99% / −99% | +116% / −61% / −58% | −0.00% vs 0.22% |
+| 2317 cc | −2.6% | −0.96 | +0.007 [−0.024, +0.033] | +39% / −94% / −90% | +40% / −26% / −22% | 0.00% vs 0.31% |
+| 2317 oc | −1.6% | −1.35 | −0.006 [−0.037, +0.016] | −97% / −98% / −98% | +23% / −24% / −19% | 0.02% vs 0.22% |
 
-1. **預測不了報酬**：OLS 的樣本外 R² 全部是負的，比直接用歷史平均還差；ridge 縮到只剩歷史平均，R² 在 ±0.5% 以內。
-   加入情緒後，Clark–West t 最高 1.46（ridge），AUC 差的信賴區間都含 0。
-2. **照正負號多空，現股全部大賠**：12 個組合（6 組 × OLS、logit）都賠 33–99%，收盤到收盤全部輸給買進持有。
-   每換手一塊錢的毛利大多不到 0.05%，實際成本是 0.22–0.31%。
-   唯一超過成本的是 2603 cc 的 OLS（0.35% 對 0.31%），但長榮波動大，複利下仍然賠 33%。
-3. **成本降到期貨的水準也不夠**：表中的 B 組在收盤到收盤全部輸給買進持有；盤中只有 2330 logit 小贏每天放空（+6% 對 +5%）。
-4. **贏不過隨機部位**：36 個多空組合（含 A 組、ridge）中，毛報酬贏過 95% 同比例隨機部位的只有 1 個，5% 的顯著水準下本來就預期會有約 2 個。
-   這個是 2317 oc 只用量價的 logit，不是 PTT 的貢獻（見[可以往哪裡做](#可以往哪裡做)第 6 點）。
-5. **門檻變化**：現股成本下，ridge 的預測幾乎從來沒超過門檻；OLS 的換手少很多，但收盤到收盤仍然輸給買進持有。
+1. Returns cannot be predicted. The out-of-sample R² of OLS is negative everywhere, worse than simply using the historical mean; ridge shrinks to the historical mean, with R² within ±0.5%.
+   With sentiment added, the highest Clark-West t is 1.46 (ridge), and every AUC-difference CI contains 0.
+2. With stock costs, long-short on the sign loses heavily. All 12 combinations (6 groups × OLS, logit) lose 33-99%, and every close-to-close one loses to buy-and-hold.
+   Gross profit per dollar traded is mostly under 0.05%, while the actual cost is 0.22-0.31%.
+   The only one above cost is 2603 cc OLS (0.35% vs 0.31%), and Evergreen is volatile enough that it still loses 33% compounded.
+3. Futures-level costs do not rescue it. Group B in the table loses to buy-and-hold in every close-to-close case; intraday, only 2330 logit narrowly beats shorting every day (+6% vs +5%).
+4. Of 36 long-short combinations, including group A and ridge, only 1 has a gross return beating 95% of random positions with the same long/short split. At the 5% level about 2 would be expected anyway.
+   That one is the price-and-volume-only logit for 2317 oc, so PTT plays no part in it (see point 6 of [Next steps](#next-steps)).
+5. With stock costs, ridge forecasts almost never clear the threshold. OLS trades much less under the threshold, but still loses to buy-and-hold close to close.
 
-2024（研究一已經用過，不是預先登記；程式在跑 2024 之前就 commit 了）的結論相同：
-- 加入情緒後 CW t 最高 1.46，AUC 差的信賴區間都含 0。
-- 現股多空 12 組中 11 組虧損，唯一賺錢的是 2603 cc logit（+3%），買進持有則是 +57%。
+2024 was already used by study 1, so this part is not preregistered; I committed the code before running 2024. The conclusion is the same:
+- With sentiment added, the highest CW t is 1.46, and every AUC-difference CI contains 0.
+- 11 of the 12 stock long-short combinations lose money. The only profitable one is 2603 cc logit (+3%), while buy-and-hold returns +57%.
 
-完整的表在 [docs/sentiment.md](docs/sentiment.md#預測報酬與多空)。
+Full tables in [docs/sentiment.md](docs/sentiment.md#預測報酬與多空).
 
-## 研究二：[標的] 文當作個股推薦
+## Study 2: [標的] posts as stock recommendations
 
-[標的] 文的作者照板規自己標明多空，比較像個股推薦。一篇文是一個事件，從發文後第一個收盤進場，看相對大盤的報酬；
-標準誤依日期與股票雙向叢集。事件解析人工抽查 200 篇，正確 198 篇。
+Board rules require [標的] authors to state long or short themselves, so these posts work like stock recommendations. Each post is one event, entered at the first close after posting, with returns measured relative to the market.
+Standard errors are two-way clustered by date and stock. I hand-checked the event parsing on 200 posts; 198 were correct.
 
-開發期 2016–2023：10,705 篇（看多 8,709、看空 1,996），1,467 檔。
+Development period 2016-2023: 10,705 posts (8,709 long, 1,996 short) on 1,467 stocks.
 
-| 看多 − 看空（市場調整） | 差 | t |
+| Long − short (market-adjusted) | Difference | t |
 |---|---|---|
-| 發文後 5 天（H1） | +0.41% | 1.99 |
-| 發文後 20 天（H2） | +0.54% | 1.44 |
-| 同上，排除進場收盤鎖漲跌停的 4.7% | +0.09% / +0.28% | 0.47 / 0.77 |
-| 發文前 5 天 | +0.69% | 2.81 |
+| 5 days after posting (H1) | +0.41% | 1.99 |
+| 20 days after posting (H2) | +0.54% | 1.44 |
+| Same, excluding the 4.7% whose entry close is locked at the price limit | +0.09% / +0.28% | 0.47 / 0.77 |
+| 5 days before posting | +0.69% | 2.81 |
 
-1. **小差距來自漲跌停**：收盤鎖漲停的看多文之後 5 天 +2.4%、鎖跌停的看空文 −6.5%，收盤鎖住時通常買不到；排除後差距接近 0。
-2. **作者在追漲**：看多、看空的股票發文前 20 天都已經漲了 4–5%。
-3. **跟著買會賠**：只買看多文，扣成本後 5 天 −0.83%、20 天 −1.51%；和流動性、過去報酬相近的股票比只落後 0.11%。
-4. **探索性分析沒有發現**：作者過去準不準、推噓比、留言情緒、附對帳單、被刪文、有沒有新聞等 14 個特徵，FDR 校正後都不顯著。
-   大盤文 656 篇，方向對錯接近隨機；有寫目標價與停損的 1,509 篇，60 天內先碰到停損約 50%、先碰到目標約 31%。
+1. The small gap comes from price limits. Long posts whose entry close is locked limit-up gain +2.4% over the next 5 days, and short posts locked limit-down lose −6.5%, but a locked close usually cannot be traded. Excluding them, the gap is close to 0.
+2. Authors chase rallies: stocks in both long and short posts had already risen 4-5% in the 20 days before posting.
+3. Following them loses money. Buying only the long posts returns −0.83% over 5 days and −1.51% over 20 days after costs, and trails stocks with similar liquidity and past returns by only 0.11%.
+4. Exploratory analysis finds nothing. None of 14 features is significant after FDR correction; they include the author's past accuracy, push/boo ratio, comment sentiment, an attached brokerage statement, deleted posts, and whether there was news.
+   For the 656 market-index posts, the direction is about as good as random. Of the 1,509 posts that give a target price and a stop loss, about 50% hit the stop first within 60 days and about 31% hit the target first.
 
-**2024/01–2025/01 最終測試**：596 篇，看空只有 57 篇，事先就知道檢定力只有約 5%。
+Final test, 2024/01 to 2025/01: 596 posts, only 57 of them short. I knew in advance that power was only about 5%.
 
-| 假設 | 開發期 | 最終測試 | 判定 |
+| Hypothesis | Development | Final test | Verdict |
 |---|---|---|---|
-| H1 5 天 看多 − 看空 > 0 | +0.41%，單尾 p = 0.023 | −1.32%（相反），p = 0.89 | 未通過 |
-| H2 20 天 看多 − 看空 > 0 | +0.54%，p = 0.075 | +1.44%，p = 0.24 | 未通過 |
-| H3 發文前 20 天有差別 | −1.05%，雙尾 p = 0.048 | −2.46%，p = 0.27 | 沒有顯著差別 |
+| H1 5-day long − short > 0 | +0.41%, one-sided p = 0.023 | −1.32% (reversed), p = 0.89 | Failed |
+| H2 20-day long − short > 0 | +0.54%, p = 0.075 | +1.44%, p = 0.24 | Failed |
+| H3 a difference in the 20 days before posting | −1.05%, two-sided p = 0.048 | −2.46%, p = 0.27 | No significant difference |
 
-## 研究三：開盤前討論量 → 當天成交量
+## Study 3: pre-open discussion volume and same-day trading volume
 
-13:30 切日的發文量大多在反應當天盤中的量價，對隔天的量與波動沒有增量（見[可以往哪裡做](#可以往哪裡做)第 1 點）。
-收盤後到隔天開盤前的討論發生在最後一筆成交之後，量價模型還沒看到。
+Post counts with the day cut at 13:30 mostly react to that day's intraday price and volume, and add nothing for the next day's volume or volatility (see point 1 of [Next steps](#next-steps)).
+Discussion between the close and the next open happens after the last trade, so the price-and-volume model has not seen it yet.
 
-- 目標：T 日的 log 成交量（主要）與 log 振幅；預測時點是 T 開盤前。
-- 訊號：T−1 13:30 到 T 09:00 的發文加留言數取 log1p，減去前 20 個交易日同一窗口的平均（`volume.py`）。
-- 基準：前幾天的量價、日曆與結算日、台指期夜盤、TSM 與費半的隔夜變動、鉅亨新聞量、前一天收漲跌停、處置期間、除權息日。
-- 擴張視窗的 OLS，每 21 個交易日重估；加入討論量前後用 Clark–West 檢定比較。
+- Target: log trading volume on day T (main) and log intraday range. The forecast is made before T's open.
+- Signal: posts plus comments from T−1 13:30 to T 09:00, log1p, minus the mean of the same window over the previous 20 trading days (`volume.py`).
+- Baseline: recent price and volume, calendar and settlement days, the TAIEX futures night session, overnight moves in TSM and the Philadelphia Semiconductor Index, cnyes news volume, a limit-up or limit-down close the day before, disposition periods, and ex-dividend days.
+- Model: expanding-window OLS, re-estimated every 21 trading days. The Clark-West test compares models with and without discussion volume.
 
-開發期只控制夜盤時，台積電成交量的 MSE 降 3.96%；加入 ADR 與費半後剩 0.96%，約 3/4 是在轉述 ADR 的隔夜變動。
+In the development period, with only the night session as a control, discussion volume cuts the MSE of TSMC's trading volume by 3.96%. After adding the ADR and SOX the cut is 0.96%, so about 3/4 of it was relaying the ADR's overnight move.
 
-| CW t（台積電／長榮／鴻海） | 開發期 2019–2023 | 2024 最終測試 | 2025-01 .. 2026-09 重複驗證 |
+| CW t (TSMC / Evergreen / Hon Hai) | Development 2019-2023 | 2024 final test | Replication, 2025-01 to 2026-09 |
 |---|---|---|---|
-| **H1** 三檔合併成交量 | 5.48 | 3.76，p = 0.0001，**通過** | 2.94，p = 0.002，**通過** |
-| H2 各檔成交量（Holm） | 2.40／3.92／3.33 | 1.67／2.63／1.65，只有長榮通過 | 2.22／2.49／1.68，三檔都通過 |
-| H3 三檔合併振幅 | 3.18 | 2.92，**通過** | 2.47，**通過** |
-| H1 再加入開盤跳空 | 4.56 | 3.19 | 2.78 |
-| 樣本外 MSE 變化 | −0.69／−1.90／−1.08% | −1.26／−2.96／−1.10% | −1.06／−1.99／−0.48% |
-| 討論量 +1 SD → 成交量 | +4.5／+8.4／+5.8% | +3.6／+10.5／+4.4% | +4.0／+10.0／+3.6% |
+| **H1** trading volume, three stocks pooled | 5.48 | 3.76, p = 0.0001, **passed** | 2.94, p = 0.002, **passed** |
+| H2 trading volume per stock (Holm) | 2.40 / 3.92 / 3.33 | 1.67 / 2.63 / 1.65, only Evergreen passed | 2.22 / 2.49 / 1.68, all three passed |
+| H3 intraday range, three stocks pooled | 3.18 | 2.92, **passed** | 2.47, **passed** |
+| H1 with the opening gap added | 4.56 | 3.19 | 2.78 |
+| Out-of-sample MSE change | −0.69 / −1.90 / −1.08% | −1.26 / −2.96 / −1.10% | −1.06 / −1.99 / −0.48% |
+| Volume change per +1 SD of discussion | +4.5 / +8.4 / +5.8% | +3.6 / +10.5 / +4.4% | +4.0 / +10.0 / +3.6% |
 
-- 加入開盤跳空（市場對所有隔夜消息的加總）後仍然顯著，所以不只是隔夜消息大小的回音。
-- 預測的是當天會不會比較熱，不是漲跌方向，所以研究一、二的結論不變。
-- 長榮的討論 2025 年以後每月只剩以前的約 1/8（38 萬則 → 1.3 萬則），增量仍是三檔最大。
-- 重複驗證共 420 個交易日，成交量三檔共同可用 395 天。
+- The result stays significant after adding the opening gap, which sums up the market's reaction to all overnight news. So the signal carries more than the size of the overnight news.
+- It predicts how busy the day will be and says nothing about direction, so the conclusions of studies 1 and 2 stand.
+- Monthly discussion of Evergreen since 2025 is only about 1/8 of what it was before (about 380k comments in 2019-2024, 13k in 2025-01 to 2026-09), yet its increment is still the largest of the three.
+- The replication covers 420 trading days; 395 of them have trading volume for all three stocks.
 
-## 可以往哪裡做
+## Next steps
 
-1. **換預測目標**：最早試的是 13:30 切日的發文量預測隔天 |報酬|，在過去波動之外沒有增量
-   （樣本外 MSE 變化 2330 −0.2%、2603 +0.1%、2317 +0.4%，信賴區間都含 0；樣本內 2603 的 t = 3.2 是 2021 航運熱潮時發文多、波動大同時發生）；
-   改用收盤後到開盤前的討論量才有了（研究三）。也可以試 5 日報酬或相對大盤的超額報酬。
-2. **加控制變數**：情緒模型還沒加新聞量與夜盤，三大法人都還沒用；研究三還沒控制長榮的運價、鴻海的蘋果與輝達、法說會與月營收公布日。
-3. **降低交易頻率**：已試過週頻、只在情緒極端時進場、預測相對大盤的超額報酬，12 個事先定好的檢定在 FDR 校正後都沒通過
-   （[docs/explore_directions.md](docs/explore_directions.md)）。
-4. **更多股票**：掃過 301 檔，2019–2023 每交易日討論量中位數 ≥ 20 則的只有 2330、2603、2317；
-   聯電、陽明、中鋼、友達只有 2021 前後夠多，其他幾乎都 ≤ 5 則，「統一」「南亞」「大成」「華電」這類簡稱又大多撞名。
-   逐日的 panel 做不起來，要改成週頻，或以討論量暴增的日子做跨股票的事件研究。
-5. **新的樣本外資料**：用 2026-10 以後的資料再驗證一次。
-6. **2317 盤中的量價訊號**：只用量價的 logit 預測鴻海隔天盤中漲跌，毛報酬在開發期贏過 96% 的隨機部位，2024 是 97%；
-   期貨成本下多空 +64%、+16%，同期每天放空是 +23%、−27%。這是 36 組裡挑出來的，而且和 PTT 無關，要用 2026-10 以後的資料預先登記再測。
+1. Change the target. My first attempt used post counts cut at 13:30 to predict the next day's |return|, and it added nothing beyond past volatility
+   (out-of-sample MSE change 2330 −0.2%, 2603 +0.1%, 2317 +0.4%, all CIs contain 0; the in-sample t = 3.2 for 2603 comes from heavy posting and high volatility coinciding in the 2021 shipping boom).
+   Switching to discussion between the close and the next open is what worked (study 3). 5-day returns or returns relative to the market are also worth trying.
+2. Add controls. The sentiment models do not yet include news volume or the night session, and institutional investor flows are not used anywhere yet. Study 3 does not yet control for freight rates (Evergreen), Apple and Nvidia (Hon Hai), or earnings call and monthly revenue release dates.
+3. Trade less often. I have tried weekly frequency, trading only on extreme sentiment, and predicting returns relative to the market; none of the 12 pre-specified tests passed FDR correction
+   ([docs/explore_directions.md](docs/explore_directions.md)).
+4. Cover more stocks. Of 301 stocks scanned, only 2330, 2603 and 2317 had a median of ≥ 20 comments per trading day in 2019-2023.
+   UMC, Yang Ming, China Steel and AUO had enough only around 2021, almost all others had ≤ 5, and short names such as 統一, 南亞, 大成 and 華電 mostly collide with other words.
+   A daily panel is not feasible. It would need weekly frequency, or a cross-stock event study on days when discussion spikes.
+5. Test again on new out-of-sample data from 2026-10 onward.
+6. Check an intraday price-and-volume signal for 2317. A logit using only price and volume to predict Hon Hai's next-day intraday direction beats 96% of random positions in gross return in the development period and 97% in 2024.
+   With futures costs, its long-short returns +64% and +16%, against +23% and −27% for shorting every day over the same periods. I picked it out of 36 combinations and it has nothing to do with PTT; it needs to be preregistered and tested on data from 2026-10 onward.
 
-## 目錄
+## Layout
 
 ```
-config.yaml           所有參數（標的、別名與排除詞、截止時間、切分、成本、LLM）
+config.yaml           all parameters (tickers, aliases and exclusions, cutoff times, splits, costs, LLM)
 src/pttsent/
-  calendar.py         交易日對齊
-  prices.py           股價、除權息還原、大盤
-  ptt.py              PTT 轉檔、挑出目標股票的文字
+  calendar.py         trading-day alignment
+  prices.py           stock prices, ex-rights/ex-dividend adjustment, market index
+  ptt.py              PTT conversion, extracting texts about the target stock
   sentiment/          lexicon / weak_labels / classifier / bert / llm_label
-  features.py         每日特徵與預測目標、開發期／最終測試期切分
-  analysis.py         相關、Granger、HAC 迴歸、事件研究
-  models.py           滾動式預測（logit、ridge、OLS）、基準、樣本外 R²、AUC 差異的 bootstrap 信賴區間
-  backtest.py         含成本回測（多空、當沖、融券與期貨成本、門檻、損益兩平、隨機基準）
-  plots.py            圖表
-  panel.py            全市場日價面板（上市＋上櫃、還原、漲跌停、大盤）
-  events.py           [標的] 文合併、股票代號解析、進場時間對齊
-  event_study.py      異常報酬、雙向叢集標準誤、日曆時間組合
-  volume.py           開盤前討論量、夜盤與美股對齊、滾動 OLS、Clark–West 檢定
-  explore.py          週頻資料、情緒極端日、極端日報酬差檢定、對沖後的超額報酬
-scripts/              01–06、13、14 研究一；07–10、fetch_prices.py、build_panel.py 研究二；11、12、fetch_us.py 研究三；
-                      train_classifier.py、llm_label.py 訓練情緒分類器
-tests/                時間對齊、不偷看未來、成本等不變量
-docs/
-  sentiment.md        研究一的細節（文字歸屬、LLM 標註、分類器與 BERT 的準確度、回測與補充結果）
-  explore_directions.md  週頻、情緒極端、超額報酬的探索計畫與結果
-  report_outline.md   專題報告大綱
-  prereg/             四份預先登記與結果：研究一、研究二、研究三、研究三的重複驗證
+  features.py         daily features and prediction targets, development / final test split
+  analysis.py         correlation, Granger, HAC regression, event study
+  models.py           rolling prediction (logit, ridge, OLS), baselines, out-of-sample R², bootstrap CIs for AUC differences
+  backtest.py         backtests with costs (long-short, day trades, borrowing and futures costs, thresholds, break-even, random benchmark)
+  plots.py            charts
+  panel.py            full-market daily price panel (TWSE + TPEx, adjustments, price limits, market index)
+  events.py           merging [標的] posts, ticker parsing, entry-time alignment
+  event_study.py      abnormal returns, two-way clustered standard errors, calendar-time portfolios
+  volume.py           pre-open discussion volume, night-session and US alignment, rolling OLS, Clark–West test
+  explore.py          weekly data, extreme-sentiment days, tests of return differences on extreme days, hedged excess returns
+scripts/              01–06, 13, 14 study 1; 07–10, fetch_prices.py, build_panel.py study 2; 11, 12, fetch_us.py study 3;
+                      train_classifier.py, llm_label.py train the sentiment classifiers
+tests/                invariants: time alignment, no look-ahead, costs
+docs/                 (in Chinese)
+  sentiment.md        study 1 details (text attribution, LLM labelling, classifier and BERT accuracy, backtests and extra results)
+  explore_directions.md  plan and results for weekly, extreme-sentiment and excess-return exploration
+  report_outline.md   capstone report outline
+  prereg/             four preregistrations with results: studies 1, 2, 3, and the study 3 replication
 ```
