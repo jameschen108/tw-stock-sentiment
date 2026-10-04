@@ -27,12 +27,15 @@ Details for study 1 are in [docs/sentiment.md](docs/sentiment.md), and for studi
 
 ## Terms
 
-- **PTT**: Taiwan's largest bulletin board system. The Stock board is its stock discussion board; comments under a post are called pushes (推文).
+- **PTT**: Taiwan's largest bulletin board system. The Stock board is its stock discussion board. Each comment under a post (推文) is a push (推, up), a boo (噓, down) or a neutral arrow (→).
 - **[標的] posts**: the Stock board's format for single-stock pitches. Board rules require the author to state long or short.
+- **TWSE, TPEx, TAIEX**: the Taiwan Stock Exchange, the Taipei Exchange (the OTC market), and the TWSE's main index. TAIEX futures also trade in a night session after the stock market closes.
+- **Institutional investors (三大法人)**: foreign investors, investment trusts and securities dealers, whose daily net buying is published by the exchange.
 - **Price limit (漲跌停)**: a Taiwan stock can move at most ±10% a day. When the close is locked at the limit, orders usually cannot be filled.
 - **Disposition stocks (處置股)**: stocks the exchange puts under trading restrictions after abnormal trading.
 - **Day trade (當沖)**: buying and selling the same stock on the same day. A sell-first day trade needs no securities borrowing.
-- **Tickers**: 2330 TSMC, 2603 Evergreen Marine, 2317 Hon Hai (Foxconn), 0050 Yuanta Taiwan 50 ETF.
+- **Tickers**: 2330 TSMC, 2603 Evergreen Marine, 2317 Hon Hai (Foxconn), 0050 Yuanta Taiwan 50 ETF. TSM is TSMC's ADR on the NYSE.
+- **Data sources**: FinMind is an open API for Taiwan market data, cnyes (鉅亨網) is a Taiwanese financial news site, and pttweb is a third-party PTT archive whose copy includes deleted posts.
 
 ## Data
 
