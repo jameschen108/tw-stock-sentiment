@@ -8,6 +8,12 @@ The project tests whether the Stock board on PTT, Taiwan's largest bulletin boar
 The question I care about is how much a price-and-volume model improves once PTT is added.
 I explored each of the three studies on a development period first, then preregistered its hypotheses and tested them once on a period I had not looked at.
 
+## Background
+
+Before this repo, I ported the design of Li, Liu, Ye, Zhao & Zhao, *It Depends on When You Search* (MIS Quarterly), to Taiwan long-tail stocks, with PTT post counts in place of Google search volume: [taiwan-market-attention](https://github.com/jameschen108/taiwan-market-attention).
+The main hypothesis, H1, was significant only under the paper's inference standard, which clusters by stock alone (t = 2.68-3.49), and not with two-way clustering (t = 1.26-1.63). So I switched methods and started this repo.
+The PTT corpus, the FinMind prices for the 267-stock universe, and the ex-rights and disposition-stock data carry over from that round. The code here is new.
+
 ## Results
 
 | Study | Question | Answer | Preregistration |

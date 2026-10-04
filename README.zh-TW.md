@@ -6,6 +6,12 @@
 核心問題是：加入 PTT 之後，比只用量價的模型好多少？
 三個研究都先在開發期探索，再把假設預先登記，在沒看過的期間只測一次。
 
+## 背景
+
+在這個 repo 之前，我把 Li, Liu, Ye, Zhao & Zhao《It Depends on When You Search》（MIS Quarterly）的設計移植到台股長尾個股，用 PTT 發文數代替 Google 搜尋量：[taiwan-market-attention](https://github.com/jameschen108/taiwan-market-attention)。
+主要假設 H1 只在原論文的推論標準（只按個股 cluster）下顯著（t = 2.68–3.49），改成雙重 cluster 就不顯著（t = 1.26–1.63），所以我換了方法，開了這個 repo。
+上一輪的 PTT 語料、267 檔的 FinMind 股價、除權息與處置股資料沿用下來；程式是重寫的。
+
 ## 結論
 
 | 研究 | 問題 | 結論 | 預先登記 |
