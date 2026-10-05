@@ -18,12 +18,12 @@ The PTT corpus, the FinMind prices for the 267-stock universe, and the ex-rights
 
 | Study | Question | Answer | Preregistration |
 |---|---|---|---|
-| 1. Daily sentiment | Does it predict next-day returns? | **No.** Sentiment reacts to prices that have already moved; the only hint in the development period did not recur in 2024; predicting returns and going long-short on the sign fails as well | [PREREGISTRATION.md](docs/prereg/PREREGISTRATION.md) |
-| 2. [標的] posts | Do the long/short calls authors declare predict later returns? | **No.** Authors chase rallies; the small gap comes from continuation after limit-locked closes, and buying on bullish posts loses money after costs | [PREREGISTRATION_TARGET.md](docs/prereg/PREREGISTRATION_TARGET.md) |
-| 3. Pre-open discussion volume | Does discussion between the close and the next open predict that day's trading volume? | **Yes**, but the effect is small (out-of-sample MSE down 0.5-3%); passed both out-of-sample tests, 2024 and 2025-2026 | [PREREGISTRATION_VOLUME.md](docs/prereg/PREREGISTRATION_VOLUME.md), [replication](docs/prereg/PREREGISTRATION_VOLUME_REPLICATION.md) |
+| 1. Daily sentiment | Does it predict next-day returns? | **No.** Sentiment reacts to prices that have already moved; the only hint in the development period did not recur in 2024; predicting returns and going long-short on the sign fails as well | [PREREGISTRATION.md](docs/prereg/PREREGISTRATION.en.md) |
+| 2. [標的] posts | Do the long/short calls authors declare predict later returns? | **No.** Authors chase rallies; the small gap comes from continuation after limit-locked closes, and buying on bullish posts loses money after costs | [PREREGISTRATION_TARGET.md](docs/prereg/PREREGISTRATION_TARGET.en.md) |
+| 3. Pre-open discussion volume | Does discussion between the close and the next open predict that day's trading volume? | **Yes**, but the effect is small (out-of-sample MSE down 0.5-3%); passed both out-of-sample tests, 2024 and 2025-2026 | [PREREGISTRATION_VOLUME.md](docs/prereg/PREREGISTRATION_VOLUME.en.md), [replication](docs/prereg/PREREGISTRATION_VOLUME_REPLICATION.en.md) |
 
 PTT reflects prices that have already moved, but it does signal whether the day will be busier than usual.
-Details for study 1 are in [docs/sentiment.md](docs/sentiment.md), and for studies 2 and 3 in their [preregistration documents](docs/prereg/). Everything under `docs/` is in Chinese.
+Details for study 1 are in [docs/sentiment.md](docs/sentiment.en.md), and for studies 2 and 3 in their [preregistration documents](docs/prereg/). The documents under `docs/` are written in Chinese; the `.en.md` files are English translations added later, and the Chinese originals are the registered versions.
 
 ## Terms
 
@@ -86,7 +86,7 @@ python scripts/12_volume_replication.py --final # 2025-01 .. 2026-09 replication
 ```
 
 - Steps 2-5 and 13 accept `--ticker` and `--method` (`lexicon` / `classifier_weak` / `classifier_llm` / `classifier_llm_pooled` / `classifier_bert`).
-  Steps 3-5 and 13 accept `--target open_to_close`, which predicts next-day open-to-close instead and writes results to `*_oc`. Classifier training is described in [docs/sentiment.md](docs/sentiment.md).
+  Steps 3-5 and 13 accept `--target open_to_close`, which predicts next-day open-to-close instead and writes results to `*_oc`. Classifier training is described in [docs/sentiment.md](docs/sentiment.en.md).
 - LLM labelling needs `ANTHROPIC_API_KEY=...` in `.env` at the project root (gitignored).
 - Results go to `output/{ticker}/{method}/` and intermediate files to `data/`; neither is in git.
 
@@ -103,7 +103,7 @@ python scripts/12_volume_replication.py --final # 2025-01 .. 2026-09 replication
 
 - Daily sentiment (`features.py`): averaged within each account for the day first, then across accounts, so that spamming accounts do not dominate. A day with no sentiment signal is missing, not 0.
 - Sentiment measures: a lexicon; a weak-label classifier, whose labels are the long/short that [標的] authors declare; a TF-IDF classifier trained on LLM labels (Claude Opus 5.5); and BERT fine-tuned on the same labels.
-  BERT reaches macro-F1 0.550 on the test set against 0.495 for TF-IDF, and 0.519 against 0.440 on 2317, which was not used in training. Details in [docs/sentiment.md](docs/sentiment.md).
+  BERT reaches macro-F1 0.550 on the test set against 0.495 for TF-IDF, and 0.519 against 0.440 on 2317, which was not used in training. Details in [docs/sentiment.md](docs/sentiment.en.md).
 - Prediction (`models.py`): predict whether tomorrow is up. Group A uses price and volume only; group B adds sentiment. Logistic regression (C=0.01), retrained every 21 trading days on past data only.
 - Backtest (`backtest.py`): hold when the model predicts up, net of commissions and securities transaction tax. For open-to-close, every day is a day trade.
 
@@ -177,7 +177,7 @@ Development period 2019-2023, BERT sentiment, group B. The benchmark for cc is b
 - With sentiment added, the highest CW t is 1.46, and every AUC-difference CI contains 0.
 - 11 of the 12 stock long-short combinations lose money. The only profitable one is 2603 cc logit (+3%), while buy-and-hold returns +57%.
 
-Full tables in [docs/sentiment.md](docs/sentiment.md#預測報酬與多空).
+Full tables in [docs/sentiment.md](docs/sentiment.en.md#predicting-returns-and-long-short).
 
 ## Study 2: [標的] posts as stock recommendations
 
@@ -240,7 +240,7 @@ In the development period, with only the night session as a control, discussion 
    Switching to discussion between the close and the next open is what worked (study 3). 5-day returns or returns relative to the market are also worth trying.
 2. Add controls. The sentiment models do not yet include news volume or the night session, and institutional investor flows are not used anywhere yet. Study 3 does not yet control for freight rates (Evergreen), Apple and Nvidia (Hon Hai), or earnings call and monthly revenue release dates.
 3. Trade less often. I have tried weekly frequency, trading only on extreme sentiment, and predicting returns relative to the market; none of the 12 pre-specified tests passed FDR correction
-   ([docs/explore_directions.md](docs/explore_directions.md)).
+   ([docs/explore_directions.md](docs/explore_directions.en.md)).
 4. Cover more stocks. Of 301 stocks scanned, only 2330, 2603 and 2317 had a median of ≥ 20 comments per trading day in 2019-2023.
    UMC, Yang Ming, China Steel and AUO had enough only around 2021, almost all others had ≤ 5, and short names such as 統一, 南亞, 大成 and 華電 mostly collide with other words.
    A daily panel is not feasible. It would need weekly frequency, or a cross-stock event study on days when discussion spikes.
@@ -270,9 +270,9 @@ src/pttsent/
 scripts/              01–06, 13, 14 study 1; 07–10, fetch_prices.py, build_panel.py study 2; 11, 12, fetch_us.py study 3;
                       train_classifier.py, llm_label.py train the sentiment classifiers
 tests/                invariants: time alignment, no look-ahead, costs
-docs/                 (in Chinese)
+docs/                 Chinese originals, with English translations in *.en.md
   sentiment.md        study 1 details (text attribution, LLM labelling, classifier and BERT accuracy, backtests and extra results)
   explore_directions.md  plan and results for weekly, extreme-sentiment and excess-return exploration
-  report_outline.md   capstone report outline
+  report_outline.md   capstone report outline (Chinese only)
   prereg/             four preregistrations with results: studies 1, 2, 3, and the study 3 replication
 ```
