@@ -83,6 +83,11 @@ python scripts/fetch_us.py --end 2026-09-27 --out us_2026   # for the replicatio
 python scripts/11_volume_prereg.py              # development period 2019–2023
 python scripts/11_volume_prereg.py --final      # 2024 final test (run once already; do not rerun)
 python scripts/12_volume_replication.py --final # 2025-01 .. 2026-09 replication (run once already; do not rerun)
+
+# Out-of-sample tests from 2026-10 (PREREGISTRATION_2026.md)
+python scripts/15_oos_2026.py power             # power simulation (periods already used only)
+python scripts/15_oos_2026.py volume --final    # third study 3 test: run once after 2027-09-30, when the data is complete
+python scripts/15_oos_2026.py honhai --final    # 2317 intraday signal: run once after 2028-09-30
 ```
 
 - Steps 2-5 and 13 accept `--ticker` and `--method` (`lexicon` / `classifier_weak` / `classifier_llm` / `classifier_llm_pooled` / `classifier_bert`).
@@ -98,6 +103,7 @@ python scripts/12_volume_replication.py --final # 2025-01 .. 2026-09 replication
 - Returns (`prices.py`): adjusted with reference prices on ex-rights/ex-dividend dates. Returns beyond the price limit that cannot be adjusted are set to missing.
 - Validation: development and final test periods are kept separate. I commit the hypotheses, thresholds and test code first, run the final test once, and record the result whichever way it goes.
   2024 and 2025-01 to 2026-09 have both been used up, so new ideas have to be tested on data from 2026-10 onward.
+  Data from 2026-10 onward is already preregistered for a third study 3 test and the 2317 intraday signal ([PREREGISTRATION_2026.md](docs/prereg/PREREGISTRATION_2026.en.md)).
 
 ## Study 1: daily sentiment and next-day returns
 
@@ -244,9 +250,12 @@ In the development period, with only the night session as a control, discussion 
 4. Cover more stocks. Of 301 stocks scanned, only 2330, 2603 and 2317 had a median of ≥ 20 comments per trading day in 2019-2023.
    UMC, Yang Ming, China Steel and AUO had enough only around 2021, almost all others had ≤ 5, and short names such as 統一, 南亞, 大成 and 華電 mostly collide with other words.
    A daily panel is not feasible. It would need weekly frequency, or a cross-stock event study on days when discussion spikes.
-5. Test again on new out-of-sample data from 2026-10 onward.
+5. Test on new out-of-sample data. A third study 3 test is preregistered for target dates 2026-10-01 to 2027-09-30 and runs once after the period ends.
+   With the 2025-26 effect, its power is about 75% ([PREREGISTRATION_2026.md](docs/prereg/PREREGISTRATION_2026.en.md)).
 6. Check an intraday price-and-volume signal for 2317. A logit using only price and volume to predict Hon Hai's next-day intraday direction beats 96% of random positions in gross return in the development period and 97% in 2024.
-   With futures costs, its long-short returns +64% and +16%, against +23% and −27% for shorting every day over the same periods. I picked it out of 36 combinations and it has nothing to do with PTT; it needs to be preregistered and tested on data from 2026-10 onward.
+   With futures costs, its long-short returns +64% and +16%, against +23% and −27% for shorting every day over the same periods. I picked it out of 36 combinations and it has nothing to do with PTT.
+   The random-position test overstates significance when long days cluster; with a Newey-West t test instead, the development period gives only t = 1.40.
+   It is preregistered for target dates 2026-10-01 to 2028-09-30; power is at most about 40%, so a failure would only count as inconclusive.
 
 ## Layout
 
@@ -267,12 +276,12 @@ src/pttsent/
   event_study.py      abnormal returns, two-way clustered standard errors, calendar-time portfolios
   volume.py           pre-open discussion volume, night-session and US alignment, rolling OLS, Clark–West test
   explore.py          weekly data, extreme-sentiment days, tests of return differences on extreme days, hedged excess returns
-scripts/              01–06, 13, 14 study 1; 07–10, fetch_prices.py, build_panel.py study 2; 11, 12, fetch_us.py study 3;
+scripts/              01–06, 13, 14 study 1; 07–10, fetch_prices.py, build_panel.py study 2; 11, 12, fetch_us.py study 3; 15 out-of-sample tests from 2026-10;
                       train_classifier.py, llm_label.py train the sentiment classifiers
 tests/                invariants: time alignment, no look-ahead, costs
 docs/                 Chinese originals, with English translations in *.en.md
   sentiment.md        study 1 details (text attribution, LLM labelling, classifier and BERT accuracy, backtests and extra results)
   explore_directions.md  plan and results for weekly, extreme-sentiment and excess-return exploration
   report_outline.md   capstone report outline (Chinese only)
-  prereg/             four preregistrations with results: studies 1, 2, 3, and the study 3 replication
+  prereg/             five preregistrations with results: studies 1, 2, 3, the study 3 replication, and the out-of-sample tests from 2026-10
 ```

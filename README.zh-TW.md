@@ -69,6 +69,11 @@ python scripts/fetch_us.py --end 2026-09-27 --out us_2026   # 重複驗證用，
 python scripts/11_volume_prereg.py              # 開發期 2019–2023
 python scripts/11_volume_prereg.py --final      # 2024 最終測試（已跑過，不要再跑）
 python scripts/12_volume_replication.py --final # 2025-01 .. 2026-09 重複驗證（已跑過，不要再跑）
+
+# 2026-10 起的樣本外檢定（PREREGISTRATION_2026.md）
+python scripts/15_oos_2026.py power             # 檢定力模擬（只用已經用過的期間）
+python scripts/15_oos_2026.py volume --final    # 研究三第三次驗證：2027-09-30 之後、資料補齊再跑一次
+python scripts/15_oos_2026.py honhai --final    # 2317 盤中訊號：2028-09-30 之後跑一次
 ```
 
 - 步驟 2–5 與 13 可加 `--ticker`、`--method`（`lexicon` / `classifier_weak` / `classifier_llm` / `classifier_llm_pooled` / `classifier_bert`）；
@@ -84,6 +89,7 @@ python scripts/12_volume_replication.py --final # 2025-01 .. 2026-09 重複驗�
 - **報酬**（`prices.py`）：除權息日用參考價還原；超過漲跌幅限制、無法還原的報酬設成缺值。
 - **驗證**：開發期和最終測試期分開；假設、門檻與檢定程式先 commit，最終測試只跑一次，結果不論好壞都照實記錄。
   2024 與 2025-01 .. 2026-09 都已經用掉了，新的想法要用 2026-10 以後的資料驗證。
+  2026-10 起的資料已經預先登記給研究三的第三次驗證與 2317 盤中訊號（[PREREGISTRATION_2026.md](docs/prereg/PREREGISTRATION_2026.md)）。
 
 ## 研究一：每日情緒 → 隔天報酬
 
@@ -230,9 +236,12 @@ python scripts/12_volume_replication.py --final # 2025-01 .. 2026-09 重複驗�
 4. **更多股票**：掃過 301 檔，2019–2023 每交易日討論量中位數 ≥ 20 則的只有 2330、2603、2317；
    聯電、陽明、中鋼、友達只有 2021 前後夠多，其他幾乎都 ≤ 5 則，「統一」「南亞」「大成」「華電」這類簡稱又大多撞名。
    逐日的 panel 做不起來，要改成週頻，或以討論量暴增的日子做跨股票的事件研究。
-5. **新的樣本外資料**：用 2026-10 以後的資料再驗證一次。
+5. **新的樣本外資料**：研究三的第三次驗證已預先登記，目標日 2026-10-01 .. 2027-09-30，期間結束後跑一次。
+   依 2025–26 年的效果，檢定力約 75%（[PREREGISTRATION_2026.md](docs/prereg/PREREGISTRATION_2026.md)）。
 6. **2317 盤中的量價訊號**：只用量價的 logit 預測鴻海隔天盤中漲跌，毛報酬在開發期贏過 96% 的隨機部位，2024 是 97%；
-   期貨成本下多空 +64%、+16%，同期每天放空是 +23%、−27%。這是 36 組裡挑出來的，而且和 PTT 無關，要用 2026-10 以後的資料預先登記再測。
+   期貨成本下多空 +64%、+16%，同期每天放空是 +23%、−27%。這是 36 組裡挑出來的，而且和 PTT 無關。
+   隨機部位檢定在做多日集中時會高估顯著性，改用 Newey–West t 檢定後，開發期只有 t = 1.40。
+   已預先登記，目標日 2026-10-01 .. 2028-09-30；檢定力最多約 40%，沒通過只能算無法判定。
 
 ## 目錄
 
@@ -253,12 +262,12 @@ src/pttsent/
   event_study.py      異常報酬、雙向叢集標準誤、日曆時間組合
   volume.py           開盤前討論量、夜盤與美股對齊、滾動 OLS、Clark–West 檢定
   explore.py          週頻資料、情緒極端日、極端日報酬差檢定、對沖後的超額報酬
-scripts/              01–06、13、14 研究一；07–10、fetch_prices.py、build_panel.py 研究二；11、12、fetch_us.py 研究三；
+scripts/              01–06、13、14 研究一；07–10、fetch_prices.py、build_panel.py 研究二；11、12、fetch_us.py 研究三；15 2026-10 起的樣本外檢定；
                       train_classifier.py、llm_label.py 訓練情緒分類器
 tests/                時間對齊、不偷看未來、成本等不變量
 docs/
   sentiment.md        研究一的細節（文字歸屬、LLM 標註、分類器與 BERT 的準確度、回測與補充結果）
   explore_directions.md  週頻、情緒極端、超額報酬的探索計畫與結果
   report_outline.md   專題報告大綱
-  prereg/             四份預先登記與結果：研究一、研究二、研究三、研究三的重複驗證
+  prereg/             五份預先登記與結果：研究一、研究二、研究三、研究三的重複驗證、2026-10 起的樣本外檢定
 ```
