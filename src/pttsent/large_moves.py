@@ -1,12 +1,15 @@
 """大漲跌日前後的新聞與 PTT 討論（見 docs/large_moves.md）。
 
-這裡先放名稱比對：267 檔的簡稱怎麼比對到 PTT 標題與鉅亨新聞，以及哪些簡稱要人工檢查。
+名稱比對：267 檔的簡稱怎麼比對到 PTT 標題與鉅亨新聞，以及哪些簡稱要人工檢查。
+事件：超額報酬、大漲跌日、後續事件、控制日、群聚日。
 """
 import re
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+from .volume import in_periods
 
 DEV = ("2019-01-01", "2024-01-01")   # 名稱檢查只用開發期的文字
 YEAR_CODES = (1990, 2030)            # 這個範圍的代號會撞到西元年份（「2008年」）
@@ -192,3 +195,88 @@ def match_rules(stats: pd.DataFrame, prec: pd.DataFrame, excl: dict) -> pd.DataF
     out["news_title"] = ~out["name_low_tag"] & out["ptt_name"]
     out["exclude"] = ["/".join(excl[c]) for c in out["code"]]
     return out
+
+
+# ---- 事件 ----
+
+EVENT_START, EVENT_END = "2019-03-01", "2023-11-30"   # 事件日 t 的範圍
+BETA_WIN, BETA_MIN = 250, 120                         # β：前 250 個交易日（不含 t），至少 120 天
+SIG_WIN, SIG_MIN = 60, 40                             # σ：前 60 個交易日的 ar 標準差，至少 40 天
+Z_MIN, AR_MIN = 3.0, 0.03                             # 大漲跌日：|ar| ≥ 3σ 而且 |ar| ≥ 3%
+FOLLOW = 5          # 前一個事件之後這麼多個交易日內的事件算後續事件
+CONTROL_GAP = 5     # 控制日前後這麼多個交易日內不能有任何事件
+HALT_GAP = 5        # 和這檔上一個交易日相隔超過這麼多個市場交易日，算停牌後恢復交易
+CLUSTER_FRAC = 0.05  # 同一天同方向事件佔當天合格股票的比例達到這個，算群聚日
+
+
+def market_model(ret: pd.Series, mkt: pd.Series) -> pd.DataFrame:
+    """一檔股票（依日期排序）的 β、超額報酬 ar 與 σ。β 與 σ 都只用 t 之前的列。"""
+    ok = ret.notna() & mkt.notna()
+    x, y = mkt.where(ok), ret.where(ok)
+
+    def past_mean(v):
+        return v.rolling(BETA_WIN, min_periods=BETA_MIN).mean().shift(1)
+
+    mx, my = past_mean(x), past_mean(y)
+    beta = (past_mean(x * y) - mx * my) / (past_mean(x * x) - mx ** 2)
+    ar = ret - beta * mkt
+    sigma = ar.rolling(SIG_WIN, min_periods=SIG_MIN).std().shift(1)
+    return pd.DataFrame({"beta": beta, "ar": ar, "sigma": sigma})
+
+
+def follow_on(pos: np.ndarray, gap: int = FOLLOW) -> np.ndarray:
+    """事件的交易日位置（遞增）-> 是否在前一個事件之後 gap 個交易日內。"""
+    d = np.diff(pos, prepend=-10 ** 9)
+    return d <= gap
+
+
+def near_event(pos: np.ndarray, event_pos: np.ndarray, gap: int = CONTROL_GAP) -> np.ndarray:
+    """每個位置前後 gap 個交易日內（含當天）有沒有事件。event_pos 要遞增。"""
+    if len(event_pos) == 0:
+        return np.zeros(len(pos), dtype=bool)
+    lo = np.searchsorted(event_pos, pos - gap, side="left")
+    hi = np.searchsorted(event_pos, pos + gap, side="right")
+    return hi > lo
+
+
+def stock_days(panel: pd.DataFrame, days: pd.DatetimeIndex, disp: pd.DataFrame, codes) -> pd.DataFrame:
+    """所有股票、所有交易日（全期間，切期間在最後）的超額報酬與事件旗標。
+
+    panel：面板裡這些股票的列；days：市場交易日曆（上市）；disp：處置期間（code、start、end）。
+    除權息、減資恢復買賣：基準價和前一天收盤不同的日子（兩個市場通用）。
+    """
+    pos_of = pd.Series(np.arange(len(days)), index=days)
+    out = []
+    for c in codes:
+        px = panel[panel["code"] == c].sort_values("date").reset_index(drop=True)
+        if px.empty:
+            continue
+        px = px[px["date"].isin(days)].reset_index(drop=True)
+        px = pd.concat([px, market_model(px["ret"], px["mkt_ret"])], axis=1)
+        px["pos"] = pos_of.reindex(px["date"]).to_numpy()
+        prev_close = px["close"].shift(1)
+        px["adj"] = (px["base"] / prev_close - 1).abs() > 1e-6
+        px["halt"] = px["pos"].diff() > HALT_GAP
+        px["disp"] = in_periods(pd.DatetimeIndex(px["date"]), disp[disp["code"] == c]).to_numpy() > 0
+        px["eligible"] = px["ar"].notna() & px["sigma"].notna() & ~px["adj"] & ~px["halt"] & ~px["disp"]
+        px["z"] = px["ar"] / px["sigma"]
+        px["event"] = px["eligible"] & (px["z"].abs() >= Z_MIN) & (px["ar"].abs() >= AR_MIN)
+        ev = px.index[px["event"]]
+        px["followon"] = False
+        px.loc[ev, "followon"] = follow_on(px.loc[ev, "pos"].to_numpy())
+        px["control"] = px["eligible"] & ~near_event(px["pos"].to_numpy(), px.loc[ev, "pos"].to_numpy())
+        out.append(px)
+    d = pd.concat(out, ignore_index=True)
+    d["up"] = d["ar"] > 0
+    d["main"] = d["event"] & ~d["followon"]
+
+    # 群聚日：同一天、同方向的事件（含後續事件）佔當天合格股票的比例
+    g = d[d["eligible"]].groupby("date")
+    n_ok = g.size()
+    frac_up = d[d["event"] & d["up"]].groupby("date").size().reindex(n_ok.index, fill_value=0) / n_ok
+    frac_dn = d[d["event"] & ~d["up"]].groupby("date").size().reindex(n_ok.index, fill_value=0) / n_ok
+    cu = d["date"].map(frac_up >= CLUSTER_FRAC).fillna(False).astype(bool)
+    cd = d["date"].map(frac_dn >= CLUSTER_FRAC).fillna(False).astype(bool)
+    d["cluster"] = d["event"] & ((d["up"] & cu) | (~d["up"] & cd))
+    d["in_period"] = (d["date"] >= EVENT_START) & (d["date"] <= EVENT_END)
+    return d

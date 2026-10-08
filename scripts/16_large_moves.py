@@ -3,6 +3,7 @@
     python scripts/16_large_moves.py names     # 名稱比對第一輪：統計每個簡稱、列出要檢查的，抽樣寫成檢查表
     python scripts/16_large_moves.py recheck   # 第二輪：補了排除詞的簡稱重新抽樣
     python scripts/16_large_moves.py rules     # 兩輪都填完之後：每檔最後的比對規則
+    python scripts/16_large_moves.py events    # 超額報酬、大漲跌日、後續事件、控制日、群聚日
 
 輸出在 docs/large_moves/：
   names_stats.csv    每檔的統計與列入檢查的原因
@@ -11,6 +12,9 @@
   names_precision.csv  每個簡稱、代號的正確率（第二輪有的用第二輪）
   names_rules.csv    每檔用不用簡稱、代號比對，以及排除詞
 檢查表已經存在時不會覆寫（加 --force 才會）。檢查完的表和比對規則一起 commit，之後才算事件。
+
+events 的輸出：data/interim/large_moves/days.parquet（每檔每個交易日一列，全期間）、
+output/large_moves/events_summary.csv（事件期間內的個數）。
 """
 import argparse
 import sys
@@ -22,7 +26,7 @@ import pyarrow.parquet as pq
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from pttsent import large_moves as lm  # noqa: E402
 from pttsent import volume as v  # noqa: E402
-from pttsent.config import ROOT, load_config, work_path  # noqa: E402
+from pttsent.config import ROOT, load_config, output_path, work_path  # noqa: E402
 
 DOC_DIR = ROOT / "docs" / "large_moves"
 
@@ -113,13 +117,52 @@ def cmd_rules(cfg, force):
     print(f"鉅亨只認股票標記：{int((~rules['news_title']).sum())} 檔")
 
 
+def cmd_events(cfg, force):
+    u = lm.universe(cfg["data_dir"])
+    panel = pd.read_parquet(work_path(cfg, "prices", "panel.parquet"),
+                            columns=["date", "code", "market", "close", "volume", "base", "ret", "mkt_ret",
+                                     "limit_up_close", "limit_down_close"])
+    days = pd.DatetimeIndex(sorted(panel.loc[panel["market"] == "TWSE", "date"].unique()))
+    panel = panel[panel["code"].isin(set(u["code"]))]
+    d = lm.stock_days(panel, days, v.load_disposition(cfg["data_dir"]), u["code"])
+    d.to_parquet(work_path(cfg, "interim", "large_moves", "days.parquet"))
+
+    p = d[d["in_period"]]
+    rows = {
+        "股票": p["code"].nunique(),
+        "股票日": len(p),
+        "排除：除權息或減資": int(p["adj"].sum()),
+        "排除：停牌後恢復": int(p["halt"].sum()),
+        "排除：處置期間": int(p["disp"].sum()),
+        "排除：β 或 σ 不足、報酬缺值": int((p["ar"].isna() | p["sigma"].isna()).sum()),
+        "合格": int(p["eligible"].sum()),
+        "事件（全部）": int(p["event"].sum()),
+        "後續事件": int(p["followon"].sum()),
+        "主要事件": int(p["main"].sum()),
+        "主要：大漲": int((p["main"] & p["up"]).sum()),
+        "主要：大跌": int((p["main"] & ~p["up"]).sum()),
+        "主要：3–5σ": int((p["main"] & (p["z"].abs() < 5)).sum()),
+        "主要：5σ 以上": int((p["main"] & (p["z"].abs() >= 5)).sum()),
+        "主要：群聚日": int((p["main"] & p["cluster"]).sum()),
+        "主要：收盤鎖漲跌停": int((p["main"] & (p["limit_up_close"] | p["limit_down_close"])).sum()),
+        "控制日": int(p["control"].sum()),
+    }
+    s = pd.Series(rows, name="n")
+    s.to_csv(output_path(cfg, "large_moves", "events_summary.csv"), encoding="utf-8-sig")
+    print(s.to_string())
+    m = p[p["main"]]
+    print("\n主要事件，依年份與方向：")
+    print(pd.crosstab(m["date"].dt.year, m["up"].map({True: "大漲", False: "大跌"})).to_string())
+    print("\n每檔主要事件數：", m.groupby("code").size().reindex(u["code"], fill_value=0).describe().round(1).to_dict())
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["names", "recheck", "rules"])
+    ap.add_argument("cmd", choices=["names", "recheck", "rules", "events"])
     ap.add_argument("--force", action="store_true", help="覆寫已經存在的檢查表")
     args = ap.parse_args()
     cfg = load_config()
-    {"names": cmd_names, "recheck": cmd_recheck, "rules": cmd_rules}[args.cmd](cfg, args.force)
+    {"names": cmd_names, "recheck": cmd_recheck, "rules": cmd_rules, "events": cmd_events}[args.cmd](cfg, args.force)
 
 
 if __name__ == "__main__":
