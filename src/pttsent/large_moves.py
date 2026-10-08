@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from .calendar import assign_trade_date
 from .volume import in_periods
 
 DEV = ("2019-01-01", "2024-01-01")   # 名稱檢查只用開發期的文字
@@ -280,3 +281,241 @@ def stock_days(panel: pd.DataFrame, days: pd.DatetimeIndex, disp: pd.DataFrame, 
     d["cluster"] = d["event"] & ((d["up"] & cu) | (~d["up"] & cd))
     d["in_period"] = (d["date"] >= EVENT_START) & (d["date"] <= EVENT_END)
     return d
+
+
+# ---- 時間窗 ----
+
+OPEN = 9                     # 開盤 09:00；收盤 13:30 由 assign_trade_date 處理
+WINDOWS = {"pre5": 5, "preopen": 1, "intraday": 1, "next": 1, "post": 4}   # 窗口 -> 天數
+BASE = (25, 6)               # PTT 基準期：t−25 到 t−6 這 20 個交易日
+
+
+def day_parts(times: pd.Series, days: pd.DatetimeIndex) -> pd.DataFrame:
+    """每則貼文或新聞 -> 所屬交易日的位置（前一天收盤後到當天收盤）、是不是在開盤前。
+
+    索引是輸入的位置（0, 1, ...）；超出日曆的列丟掉。
+    """
+    t = pd.to_datetime(times.reset_index(drop=True))
+    td = assign_trade_date(t, days)
+    ok = td.notna()
+    t, td = t[ok], td[ok]
+    return pd.DataFrame({"pos": days.searchsorted(td), "pre": (t < td + pd.Timedelta(hours=OPEN)).to_numpy()},
+                        index=t.index)
+
+
+def daily_counts(parts: pd.DataFrame, n_days: int) -> tuple[np.ndarray, np.ndarray]:
+    """每個交易日開盤前、盤中（含前一天收盤後到午夜這段算開盤前）的則數。"""
+    pre = np.bincount(parts.loc[parts["pre"], "pos"], minlength=n_days)[:n_days].astype(float)
+    intra = np.bincount(parts.loc[~parts["pre"], "pos"], minlength=n_days)[:n_days].astype(float)
+    return pre, intra
+
+
+def window_counts(pre: np.ndarray, intra: np.ndarray, i: np.ndarray) -> pd.DataFrame:
+    """事件日位置 i 的五個窗口的則數，以及基準期每日 log1p 則數的平均。超出陣列範圍的是缺值。"""
+    full = pre + intra
+    n = len(full)
+    cs = np.concatenate([[0.0], np.cumsum(full)])
+    lcs = np.concatenate([[0.0], np.cumsum(np.log1p(full))])
+
+    def rng_sum(c, a, b):        # 位置 a..b（含）的總和
+        out = np.full(len(i), np.nan)
+        ok = (a >= 0) & (b < n)
+        out[ok] = c[b[ok] + 1] - c[a[ok]]
+        return out
+
+    def at(v, k):
+        out = np.full(len(i), np.nan)
+        ok = (k >= 0) & (k < n)
+        out[ok] = v[k[ok]]
+        return out
+
+    return pd.DataFrame({
+        "pre5": rng_sum(cs, i - 5, i - 1),
+        "preopen": at(pre, i),
+        "intraday": at(intra, i),
+        "next": at(full, i + 1),
+        "post": rng_sum(cs, i + 2, i + 5),
+        "base": rng_sum(lcs, i - BASE[0], i - BASE[1]) / (BASE[0] - BASE[1] + 1),
+    })
+
+
+# ---- 比對：PTT 與鉅亨 ----
+
+def _has_latin(s: str) -> bool:
+    return bool(re.search(r"[A-Za-z]", s))
+
+
+def mentions(text: pd.Series, rule) -> np.ndarray:
+    """text（已經 norm_text）裡提到這檔的列。rule：names_rules 的一列（code、name、ptt_name、ptt_code、exclude）。"""
+    hit = np.zeros(len(text), dtype=bool)
+    if rule.ptt_code:
+        cand = text.str.contains(rule.code, regex=False).to_numpy()
+        if cand.any():
+            hit[cand] = text[cand].str.contains(code_regex(rule.code)).to_numpy()
+    if rule.ptt_name:
+        case = not _has_latin(rule.name)
+        cand = text.str.contains(rule.name, case=case, regex=False).to_numpy() & ~hit
+        if cand.any():
+            excl = [w for w in str(rule.exclude or "").split("/") if w]
+            sub = remove_words(text[cand], excl) if excl else text[cand]
+            hit[cand] = sub.str.contains(rule.name, case=case, regex=False).to_numpy()
+    return hit
+
+
+def ptt_items(ptt_dir: Path, years, rules: pd.DataFrame, max_lag_days: int, end: str) -> pd.DataFrame:
+    """每檔被提到的 PTT 文章與留言（code、time）。比照研究一的 select_texts：
+    文章算標題提到的；留言算在這些文章底下的，或留言本身提到的。留言晚於文章超過 max_lag_days 的不算。
+    """
+    import pyarrow.parquet as pq
+    out = []
+    for y in years:
+        a = pq.read_table(ptt_dir / f"articles_{y}.parquet", columns=["article_id", "time", "title"]).to_pandas()
+        c = pq.read_table(ptt_dir / f"comments_{y}.parquet", columns=["article_id", "time", "content", "lag_sec"]).to_pandas()
+        a, c = a[a["time"] < end], c[(c["time"] < end) & (c["lag_sec"] <= max_lag_days * 86400)]
+        title = norm_text(a["title"].fillna(""))
+        content = norm_text(c["content"].fillna(""))
+        for r in rules.itertuples():
+            ta = mentions(title, r)
+            ids = set(a.loc[ta, "article_id"])
+            tc = c["article_id"].isin(ids).to_numpy() | mentions(content, r)
+            out.append(pd.DataFrame({"code": r.code, "time": np.concatenate([a.loc[ta, "time"].to_numpy(),
+                                                                              c.loc[tc, "time"].to_numpy()])}))
+    return pd.concat(out, ignore_index=True)
+
+
+def news_items(news: pd.DataFrame, rules: pd.DataFrame) -> pd.DataFrame:
+    """每檔被提到的鉅亨新聞（code、time）：股票標記含這檔，或（news_title 為真時）標題提到簡稱。"""
+    title = norm_text(news["title"].fillna(""))
+    tags = news["stock"]
+    out = []
+    for r in rules.itertuples():
+        hit = tags.map(lambda s: r.code in s).to_numpy(dtype=bool, copy=True)
+        if r.news_title:
+            hit |= mentions(title, r._replace(ptt_code=False, ptt_name=True))
+        out.append(pd.DataFrame({"code": r.code, "time": news.loc[hit, "time"].to_numpy()}))
+    return pd.concat(out, ignore_index=True)
+
+
+# ---- 有固定效果、雙向 cluster 的 OLS ----
+
+def demean(df: pd.DataFrame, cols, fes, tol: float = 1e-10, max_iter: int = 10_000) -> pd.DataFrame:
+    """交替投影：把 cols 對多組固定效果去平均（Frisch–Waugh–Lovell）。"""
+    x = df[cols].to_numpy(dtype=float).copy()
+    codes = [pd.factorize(df[f])[0] for f in fes]
+    sizes = [np.bincount(k) for k in codes]
+    for _ in range(max_iter):
+        delta = 0.0
+        for k, n in zip(codes, sizes):
+            m = np.column_stack([np.bincount(k, weights=x[:, j]) / n for j in range(x.shape[1])])
+            x -= m[k]
+            delta = max(delta, np.abs(m).max())
+        if delta < tol:
+            break
+    return pd.DataFrame(x, columns=cols, index=df.index)
+
+
+def fe_ols(df: pd.DataFrame, y: str, xs, fes, clusters=("code", "date")):
+    """y ~ xs + 固定效果，標準誤依 clusters 雙向 cluster（Cameron–Gelbach–Miller，statsmodels）。"""
+    import statsmodels.api as sm
+    d = df.dropna(subset=[y, *xs])
+    dm = demean(d, [y, *xs], fes)
+    groups = np.column_stack([pd.factorize(d[c])[0] for c in clusters])
+    return sm.OLS(dm[y], dm[list(xs)]).fit(cov_type="cluster", cov_kwds={"groups": groups})
+
+
+# ---- 分析 ----
+
+def add_windows(d: pd.DataFrame, items: pd.DataFrame, days: pd.DatetimeIndex, prefix: str,
+                start=None, end=None) -> pd.DataFrame:
+    """d（days 表的列，要有 code、pos）加上五個窗口的則數與基準期，欄名 {prefix}_{窗口}、{prefix}_base。
+
+    items：code、time。start／end：資料的起訖（end 不含）；窗口或基準期有一部分落在資料範圍外的是缺值。
+    """
+    parts = day_parts(items["time"], days)
+    parts["code"] = items["code"].to_numpy()[parts.index]
+    out = pd.DataFrame(index=d.index, columns=[f"{prefix}_{w}" for w in [*WINDOWS, "base"]], dtype=float)
+    by_code = dict(tuple(parts.groupby("code")))
+    empty = parts.iloc[:0]
+    for c, rows in d.groupby("code"):
+        pre, intra = daily_counts(by_code.get(c, empty), len(days))
+        wc = window_counts(pre, intra, rows["pos"].to_numpy())
+        out.loc[rows.index] = wc.to_numpy()
+    i = d["pos"].to_numpy()
+    if start is not None:   # 最早用到的是基準期第一天（t−25）那個窗口，從 t−26 收盤開始
+        lo = np.clip(i - BASE[0] - 1, 0, None)
+        out.loc[(i - BASE[0] - 1 < 0) | (days[lo] < pd.Timestamp(start))] = np.nan
+    if end is not None:     # 最晚用到的是事後窗口的最後一天（t+5）
+        hi = np.clip(i + 5, None, len(days) - 1)
+        out.loc[(i + 5 >= len(days)) | (days[hi] >= pd.Timestamp(end))] = np.nan
+    return d.join(out)
+
+
+def outcomes(d: pd.DataFrame) -> pd.DataFrame:
+    """則數 -> 結果變數：news_any_*（0/1）、news_log_*（log1p）、ptt_abn_*（異常討論量）。"""
+    out = {}
+    for w, n in WINDOWS.items():
+        out[f"news_any_{w}"] = (d[f"news_{w}"] > 0).astype(float).where(d[f"news_{w}"].notna())
+        out[f"news_log_{w}"] = np.log1p(d[f"news_{w}"])
+        out[f"ptt_abn_{w}"] = np.log1p(d[f"ptt_{w}"] / n) - d["ptt_base"]
+    return d.assign(**out)
+
+
+def stock_lags(d: pd.DataFrame) -> pd.DataFrame:
+    """同一檔前一個交易日的量價（P1、P2 的控制變數），以及下一個交易日的當沖比例。"""
+    d = d.sort_values(["code", "date"])
+    g = d.groupby("code", sort=False)
+    lv = np.log(d["volume"])
+    lv_avg = lv.groupby(d["code"]).transform(lambda s: s.shift(2).rolling(20).mean())
+    return d.assign(
+        abs_z1=(g["ar"].shift(1).abs() / d["sigma"]),
+        log_sigma=np.log(d["sigma"]),
+        lock1=g["locked"].shift(1).astype(float),
+        lvol_abn1=lv.groupby(d["code"]).shift(1) - lv_avg,
+        dt_next=g["dt_intraday"].shift(-1),
+    )
+
+
+def scar(d: pd.DataFrame, k: int, end) -> pd.Series:
+    """sign(ar_t) × 之後 k 個交易日（這檔自己的）ar 的和；有任何一天缺值或落在 end 之後就是缺值。"""
+    d = d.sort_values(["code", "date"])
+    ar = d["ar"].where(d["date"] < pd.Timestamp(end))
+    tot = sum(ar.groupby(d["code"]).shift(-j) for j in range(1, k + 1))
+    return (np.sign(d["ar"]) * tot).reindex(d.index)
+
+
+def part1(d: pd.DataFrame, ys) -> pd.DataFrame:
+    """y = a × 大漲 + b × 大跌 + 個股×年 FE + 日期 FE；樣本是主要事件日加控制日。"""
+    s = d[d["main"] | d["control"]].assign(up_ev=lambda x: (x["main"] & x["up"]).astype(float),
+                                            dn_ev=lambda x: (x["main"] & ~x["up"]).astype(float))
+    rows = []
+    for y in ys:
+        f = fe_ols(s, y, ["up_ev", "dn_ev"], ["code_year", "date"])
+        ci = f.conf_int()
+        raw = s.dropna(subset=[y])
+        for x, lab in (("up_ev", "大漲"), ("dn_ev", "大跌")):
+            rows.append({"y": y, "event": lab, "coef": f.params[x], "lo": ci.loc[x, 0], "hi": ci.loc[x, 1],
+                         "p": f.pvalues[x], "n": int(f.nobs),
+                         "mean_event": raw.loc[raw[x] == 1, y].mean(), "mean_control": raw.loc[raw["control"], y].mean()})
+    return pd.DataFrame(rows)
+
+
+P12_X = ["ptt_abn_preopen", "ptt_abn_pre5", "news_log_preopen", "news_log_pre5",
+         "abs_z1", "log_sigma", "lock1", "lvol_abn1"]
+
+
+def p12(d: pd.DataFrame):
+    """事件(t) ~ 開盤前與事前的 PTT 異常 + 控制；樣本是所有合格、不是後續事件的日子。"""
+    s = d[d["eligible"] & ~d["followon"]].assign(y=lambda x: x["main"].astype(float))
+    return fe_ols(s, "y", P12_X, ["code_year", "date"])
+
+
+P34_X = ["nonews", "locked", "abs_z", "log_sigma", "up_f"]
+
+
+def p34(d: pd.DataFrame, k: int):
+    """sCAR(k) ~ 無新聞 + 收盤鎖漲跌停 + |ar|/σ + log σ + 大漲 + 年月 FE；樣本是主要事件。"""
+    s = d[d["main"]].assign(nonews=lambda x: ((x["news_preopen"] + x["news_intraday"]) == 0).astype(float)
+                            .where(x["news_preopen"].notna() & x["news_intraday"].notna()),
+                            locked=lambda x: x["locked"].astype(float), abs_z=lambda x: x["z"].abs(),
+                            up_f=lambda x: x["up"].astype(float))
+    return fe_ols(s, f"scar{k}", P34_X, ["year_month"])
