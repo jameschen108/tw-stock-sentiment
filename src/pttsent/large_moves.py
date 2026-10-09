@@ -503,10 +503,10 @@ P12_X = ["ptt_abn_preopen", "ptt_abn_pre5", "news_log_preopen", "news_log_pre5",
          "abs_z1", "log_sigma", "lock1", "lvol_abn1"]
 
 
-def p12(d: pd.DataFrame):
+def p12(d: pd.DataFrame, xs=P12_X):
     """事件(t) ~ 開盤前與事前的 PTT 異常 + 控制；樣本是所有合格、不是後續事件的日子。"""
     s = d[d["eligible"] & ~d["followon"]].assign(y=lambda x: x["main"].astype(float))
-    return fe_ols(s, "y", P12_X, ["code_year", "date"])
+    return fe_ols(s, "y", list(xs), ["code_year", "date"])
 
 
 P34_X = ["nonews", "locked", "abs_z", "log_sigma", "up_f"]
@@ -519,3 +519,20 @@ def p34(d: pd.DataFrame, k: int):
                             locked=lambda x: x["locked"].astype(float), abs_z=lambda x: x["z"].abs(),
                             up_f=lambda x: x["up"].astype(float))
     return fe_ols(s, f"scar{k}", P34_X, ["year_month"])
+
+
+TRIAL = (8, 30)   # 試撮從 08:30 開始
+
+
+def preopen_split(d: pd.DataFrame, items: pd.DataFrame, days: pd.DatetimeIndex) -> pd.DataFrame:
+    """開盤前窗口拆兩段的則數：pre_early（前一天收盤到 08:30）、pre_late（08:30 到 09:00 開盤）。索引和 d 相同。"""
+    parts = day_parts(items["time"], days)
+    t = pd.to_datetime(items["time"]).to_numpy()[parts.index]
+    cut = days[parts["pos"]] + pd.Timedelta(hours=TRIAL[0], minutes=TRIAL[1])
+    parts = parts.assign(code=items["code"].to_numpy()[parts.index], late=parts["pre"].to_numpy() & (t >= cut.to_numpy()))
+    pre = parts[parts["pre"]]
+    n = pre.groupby(["code", "pos", "late"]).size().unstack("late", fill_value=0)
+    n = n.reindex(columns=[False, True], fill_value=0)
+    key = pd.MultiIndex.from_arrays([d["code"], d["pos"]])
+    return pd.DataFrame({"pre_early": n[False].reindex(key, fill_value=0).to_numpy(),
+                         "pre_late": n[True].reindex(key, fill_value=0).to_numpy()}, index=d.index)

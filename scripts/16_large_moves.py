@@ -6,6 +6,7 @@
     python scripts/16_large_moves.py events    # 超額報酬、大漲跌日、後續事件、控制日、群聚日
     python scripts/16_large_moves.py windows   # 每個股票日五個窗口的新聞、PTT 則數與當沖比例（資料準備，不跑回歸）
     python scripts/16_large_moves.py analyze   # 第一部分與 P1–P4；程式和計畫都 commit 之後才會跑
+    python scripts/16_large_moves.py supplement  # 事後的補充分析：加入 MOPS 重大訊息（S1–S3），要先跑 fetch_mops.py
 
 輸出在 docs/large_moves/：
   names_stats.csv    每檔的統計與列入檢查的原因
@@ -37,6 +38,7 @@ from scipy.stats import norm
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from pttsent import large_moves as lm  # noqa: E402
+from pttsent import mops  # noqa: E402
 from pttsent import volume as v  # noqa: E402
 from pttsent.config import ROOT, load_config, output_path, work_path  # noqa: E402
 
@@ -282,15 +284,56 @@ def cmd_analyze(cfg, force):
         print(pr.round(4).to_string(index=False))
 
 
+def cmd_supplement(cfg, force):
+    """計畫「補充分析」一節的 S1–S3。事後加的，只報係數與信賴區間，不判定。"""
+    if not committed(REGISTERED + ["src/pttsent/mops.py", "scripts/fetch_mops.py"]):
+        sys.exit("計畫或程式有沒 commit 的修改；先 commit 再跑")
+    end = lm.DEV[1]
+    days = pd.DatetimeIndex(sorted(pd.read_parquet(work_path(cfg, "prices", "panel.parquet"), columns=["date", "market"])
+                                   .query("market == 'TWSE'")["date"].unique()))
+    d = pd.read_parquet(work_path(cfg, "interim", "large_moves", "windows.parquet"))
+    ann = mops.load(work_path(cfg, "mops", "t05st01", "x").parent)
+    ann = ann[(ann["time"] >= PTT_START) & (ann["time"] < end) & ann["code"].isin(set(d["code"]))]
+    print(f"重大訊息 {len(ann):,} 則、{ann['code'].nunique()} 檔")
+    d = lm.add_windows(d, ann[["code", "time"]], days, "mops", start=PTT_START, end=end)
+    for w in lm.WINDOWS:
+        d[f"mops_any_{w}"] = (d[f"mops_{w}"] > 0).astype(float).where(d[f"mops_{w}"].notna())
+        d[f"mops_log_{w}"] = np.log1p(d[f"mops_{w}"])
+    split = lm.preopen_split(d, pd.read_parquet(work_path(cfg, "interim", "large_moves", "ptt_items.parquet")), days)
+    d["ptt_abn_pre_early"] = np.log1p(split["pre_early"]) - d["ptt_base"]
+    d["ptt_abn_pre_late"] = np.log1p(split["pre_late"]) - d["ptt_base"]
+
+    mops_x = ["mops_log_preopen", "mops_log_pre5"]
+    s1 = lm.p12(d, lm.P12_X + mops_x)
+    xs2 = ["ptt_abn_pre_early", "ptt_abn_pre_late"] + [x for x in lm.P12_X if x != "ptt_abn_preopen"] + mops_x
+    s2 = lm.p12(d, xs2)
+    out = pd.concat([coef_table(lm.p12(d), "P1 原設定"), coef_table(s1, "S1 加重大訊息"), coef_table(s2, "S2 拆試撮")])
+    out.to_csv(output_path(cfg, "large_moves", "supp_p1.csv"), encoding="utf-8-sig")
+    keep = ["ptt_abn_preopen", "ptt_abn_pre_early", "ptt_abn_pre_late", "ptt_abn_pre5"] + mops_x + ["news_log_preopen"]
+    print(out[out.index.isin(keep)].round(4).to_string())
+
+    e = d[d["main"]]
+    none = ((e["news_preopen"] + e["news_intraday"]) == 0) & ((e["mops_preopen"] + e["mops_intraday"]) == 0)
+    s3 = pd.Series({"主要事件": len(e),
+                    "沒有鉅亨頭條": float(((e["news_preopen"] + e["news_intraday"]) == 0).mean()),
+                    "沒有重大訊息": float(((e["mops_preopen"] + e["mops_intraday"]) == 0).mean()),
+                    "兩者都沒有": float(none.mean())})
+    s3.to_csv(output_path(cfg, "large_moves", "supp_s3.csv"), encoding="utf-8-sig")
+    print("\nt−1 收盤到 t 收盤之間：", s3.round(3).to_dict())
+    p1 = lm.part1(d, [f"mops_any_{w}" for w in lm.WINDOWS])
+    p1.to_csv(output_path(cfg, "large_moves", "supp_part1.csv"), index=False, encoding="utf-8-sig")
+    print(p1[["y", "event", "coef", "lo", "hi", "mean_event", "mean_control"]].round(4).to_string(index=False))
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["names", "recheck", "rules", "events", "windows", "analyze"])
+    ap.add_argument("cmd", choices=["names", "recheck", "rules", "events", "windows", "analyze", "supplement"])
     ap.add_argument("--force", action="store_true",
                     help="names/recheck：覆寫檢查表；windows：重算 PTT 比對")
     args = ap.parse_args()
     cfg = load_config()
     {"names": cmd_names, "recheck": cmd_recheck, "rules": cmd_rules, "events": cmd_events,
-     "windows": cmd_windows, "analyze": cmd_analyze}[args.cmd](cfg, args.force)
+     "windows": cmd_windows, "analyze": cmd_analyze, "supplement": cmd_supplement}[args.cmd](cfg, args.force)
 
 
 if __name__ == "__main__":

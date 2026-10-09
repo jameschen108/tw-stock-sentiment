@@ -94,3 +94,28 @@ def test_mentions_rules():
     assert mentions(text, R("2008", "高興昌", True, False, "")).tolist() == [False, True, False, False, False]
     assert mentions(text, R("1303", "南亞", True, True, "東南亞/南亞科")).tolist() == [False, False, False, True, False]
     assert mentions(text, R("6902", "GOGOLOOK", True, True, "")).tolist() == [False, False, False, False, True]
+
+
+def test_mops_parse_and_status():
+    from pttsent.mops import parse, status
+    page = ("<table class='hasBorder'><tr class='tblHead'><th>公司代號</th></tr>"
+            "<tr class='even'><td>&nbsp;1616</td><td>&nbsp;億泰</td><td>&nbsp;108/03/26</td><td>&nbsp;16:36:51</td>"
+            "<td><pre><font size='3'>&nbsp;董事會決議召開股東會</font></pre></td>"
+            "<td><input onclick=\"document.f.seq_no.value='1';\"></td></tr></table>")
+    d = parse(page)
+    assert status(page) == "ok" and status("資料庫中查無需求資料") == "empty" and status("<html>") == "blocked"
+    assert d.iloc[0].tolist() == ["1616", pd.Timestamp("2019-03-26 16:36:51"), 1, "董事會決議召開股東會"]
+
+
+def test_preopen_split():
+    from pttsent.large_moves import preopen_split
+    days = pd.DatetimeIndex(pd.bdate_range("2024-01-01", periods=10))
+    items = pd.DataFrame({"code": ["A"] * 4, "time": pd.to_datetime([
+        "2024-01-04 14:00",   # 前一天收盤後 -> 1/5 early
+        "2024-01-05 08:29",   # early
+        "2024-01-05 08:30",   # 試撮 -> late
+        "2024-01-05 09:00",   # 盤中，不算
+    ])})
+    d = pd.DataFrame({"code": ["A", "B"], "pos": [days.get_loc(pd.Timestamp("2024-01-05"))] * 2})
+    s = preopen_split(d, items, days)
+    assert s.values.tolist() == [[2, 1], [0, 0]]
