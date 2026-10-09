@@ -2,6 +2,7 @@
 
     python scripts/fetch_mops.py                          # 2019–2023
     python scripts/fetch_mops.py --start 2019 --end 2023 --codes 2330 1616
+    python scripts/fetch_mops.py --start 2026 --end 2027 --out t05st01_2027   # 另存一個資料夾（大漲跌預先登記的評估期 B）
 
 每檔每年一個請求，存到 data/mops/t05st01/{代號}_{民國年}.html；一年接近 200 則時（怕被截斷）再逐月各查一次，
 存成 {代號}_{民國年}_{月}.html。manifest.jsonl 記錄每個請求的參數、時間、狀態、則數與 sha256；中斷後重跑會跳過
@@ -39,9 +40,10 @@ def main():
     ap.add_argument("--end", type=int, default=2023)
     ap.add_argument("--codes", nargs="*", help="預設是 universe_267.csv 全部")
     ap.add_argument("--sleep", type=float, default=4.0)
+    ap.add_argument("--out", default="t05st01", help="data/mops/ 底下的資料夾")
     a = ap.parse_args()
     cfg = load_config()
-    out_dir = work_path(cfg, "mops", "t05st01", "x").parent
+    out_dir = work_path(cfg, "mops", a.out, "x").parent
     manifest = out_dir / "manifest.jsonl"
     log = [json.loads(line) for line in manifest.read_text().splitlines() if line.strip()] if manifest.exists() else []
     done = {r["key"] for r in log}
