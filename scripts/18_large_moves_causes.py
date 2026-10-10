@@ -259,11 +259,12 @@ def cmd_report(cfg):
     items = pd.read_parquet(d / "items.parquet")
     res = pd.read_parquet(d / "results.parquet")
     ev = ev.merge(res[["ev_id", "status", "category", "cause_ids", "confidence", "reason"]], on="ev_id", how="left")
-    empty = ev["cause_ids"].map(lambda x: x is None or len(x) == 0)
+    ev["cause_ids"] = ev["cause_ids"].map(lambda x: list(x) if isinstance(x, (list, tuple, np.ndarray)) else [])
+    empty = ev["cause_ids"].map(len) == 0
     ev.loc[(ev["category"] == "其他") & empty, "category"] = C.NOT_FOUND
     ev.loc[ev["no_news"], "category"] = C.NO_NEWS
     t_of = items.set_index(["ev_id", "item_id"])["time"]
-    ev["timing"] = [C.timing(pd.Series([t_of.get((e, i)) for i in (ids if ids is not None else [])], dtype="datetime64[ns]").dropna(), t)
+    ev["timing"] = [C.timing(pd.Series([t_of.get((e, i)) for i in ids], dtype="datetime64[ns]").dropna(), t)
                     for e, ids, t in zip(ev["ev_id"], ev["cause_ids"], ev["date"])]
     ev.drop(columns="msg").to_parquet(output_path(cfg, "large_moves", "causes.parquet"))
 
