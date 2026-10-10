@@ -119,3 +119,14 @@ def test_preopen_split():
     d = pd.DataFrame({"code": ["A", "B"], "pos": [days.get_loc(pd.Timestamp("2024-01-05"))] * 2})
     s = preopen_split(d, items, days)
     assert s.values.tolist() == [[2, 1], [0, 0]]
+
+
+def test_causes_timing_and_kappa():
+    from pttsent.causes import cohen_kappa, timing
+    t = pd.Timestamp("2024-01-05")
+    assert timing(pd.Series(pd.to_datetime(["2024-01-04 18:00", "2024-01-05 10:00"])), t) == "before"
+    assert timing(pd.Series(pd.to_datetime(["2024-01-05 13:30"])), t) == "intraday"
+    assert timing(pd.Series(pd.to_datetime(["2024-01-05 14:00"])), t) == "after"
+    assert timing(pd.Series([], dtype="datetime64[ns]"), t) == "none"
+    assert cohen_kappa("aabb", "aabb") == 1
+    assert abs(cohen_kappa("aabb", "abab")) < 1e-12      # 一致率 0.5，等於隨機
