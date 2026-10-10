@@ -6,7 +6,7 @@ My individual part of a five-person undergraduate capstone at Soochow University
 
 The project tests whether the Stock board on PTT, Taiwan's largest bulletin board system, carries information beyond price and volume.
 The question I care about is how much a price-and-volume model improves once PTT is added.
-I explored each of the three studies on a development period first, then preregistered its hypotheses and tested them once on a period I had not looked at.
+I explored each of the four studies on a development period first, then preregistered its hypotheses and tested them once on a period I had not looked at.
 
 ## Background
 
@@ -21,9 +21,10 @@ The PTT corpus, the FinMind prices for the 267-stock universe, and the ex-rights
 | 1. Daily sentiment | Does it predict next-day returns? | **No.** Sentiment reacts to prices that have already moved; the only hint in the development period did not recur in 2024; predicting returns and going long-short on the sign fails as well | [PREREGISTRATION.md](docs/prereg/PREREGISTRATION.en.md) |
 | 2. [標的] posts | Do the long/short calls authors declare predict later returns? | **No.** Authors chase rallies; the small gap comes from continuation after limit-locked closes, and buying on bullish posts loses money after costs | [PREREGISTRATION_TARGET.md](docs/prereg/PREREGISTRATION_TARGET.en.md) |
 | 3. Pre-open discussion volume | Does discussion between the close and the next open predict that day's trading volume? | **Yes**, but the effect is small (out-of-sample MSE down 0.5-3%); passed both out-of-sample tests, 2024 and 2025-2026 | [PREREGISTRATION_VOLUME.md](docs/prereg/PREREGISTRATION_VOLUME.en.md), [replication](docs/prereg/PREREGISTRATION_VOLUME_REPLICATION.en.md) |
+| 4. Large moves | Do news and discussion show anything before a stock's large up or down days? | **Pre-open discussion signals whether the day will bring a large move** (direction unknown): after controlling for cnyes news and MOPS announcements it passed out of sample, 2024-01 to 2026-09 (t = 4.61). About 70% of large moves have neither a cnyes headline nor a MOPS announcement that day; moves without news show no clear reversal afterwards | [PREREGISTRATION_LARGE_MOVES.md](docs/prereg/PREREGISTRATION_LARGE_MOVES.md) (Chinese only) |
 
-PTT reflects prices that have already moved, but it does signal whether the day will be busier than usual.
-Details for study 1 are in [docs/sentiment.md](docs/sentiment.en.md), and for studies 2 and 3 in their [preregistration documents](docs/prereg/). The documents under `docs/` are written in Chinese; the `.en.md` files are English translations added later, and the Chinese originals are the registered versions.
+PTT reflects prices that have already moved, but it does signal whether the day will be busier than usual and whether a large move is coming, though not which way.
+Details for study 1 are in [docs/sentiment.md](docs/sentiment.en.md), for studies 2 and 3 in their [preregistration documents](docs/prereg/), and for study 4 in [docs/large_moves.md](docs/large_moves.md) (Chinese only for now). The documents under `docs/` are written in Chinese; the `.en.md` files are English translations added later, and the Chinese originals are the registered versions.
 
 ## Terms
 
@@ -36,6 +37,7 @@ Details for study 1 are in [docs/sentiment.md](docs/sentiment.en.md), and for st
 - **Day trade (當沖)**: buying and selling the same stock on the same day. A sell-first day trade needs no securities borrowing.
 - **Tickers**: 2330 TSMC, 2603 Evergreen Marine, 2317 Hon Hai (Foxconn), 0050 Yuanta Taiwan 50 ETF. TSM is TSMC's ADR on the NYSE.
 - **Data sources**: FinMind is an open API for Taiwan market data, cnyes (鉅亨網) is a Taiwanese financial news site, and pttweb is a third-party PTT archive whose copy includes deleted posts.
+- **MOPS (公開資訊觀測站)**: the Market Observation Post System, where listed companies file material announcements (重大訊息), financial reports and monthly revenue.
 
 ## Data
 
@@ -43,13 +45,15 @@ Raw data is not in this repo. The code reads it from a local folder, `/Users/jam
 
 | Use | Path | Notes |
 |---|---|---|
-| PTT posts and comments | `pttcc/stock_{year}.jsonl` | 2019-2024: 158k posts, 15.63M comments; 2025 to 2026/09/26: 45k posts, 5.56M comments (used only in the study 3 replication) |
+| PTT posts and comments | `pttcc/stock_{year}.jsonl` | 2019-2024: 158k posts, 15.63M comments; 2025 to 2026/09/26: 45k posts, 5.56M comments (used only in the study 3 replication and study 4's period A) |
 | PTT [標的] posts | pttweb | 2015/04 to 2025/01, including deleted posts (study 2) |
 | Daily stock prices, market index | `raw/finmind/price/`, `raw/twse_taiex/` | 267 stocks + 0050, 2014 to 2025/03 (study 1) |
 | Ex-rights/ex-dividend, disposition stocks | `raw/twse_exrights/`, `raw/twse_punish/` | Return adjustment; controls in study 3 |
-| cnyes news, TAIEX futures | `raw/cnyes/headline/`, `raw/taifex_tx/` | Controls in study 3; exploratory analysis in study 2 |
+| cnyes news, TAIEX futures | `raw/cnyes/headline/`, `raw/taifex_tx/` | Controls in studies 3 and 4; exploratory analysis in study 2 |
+| Day-trade volume | `raw/twse_twtb4u/` | TWSE TWTB4U, 2015-2024, listed stocks only (descriptive part of study 4) |
 
-Studies 2 and 3 also use a full-market daily price panel I downloaded myself (TWSE + TPEx, 2015 to 2026/09, including delisted stocks and adjusted for capital reductions) and US data (TSM, ^SOX), stored in `data/prices/`.
+Studies 2, 3 and 4 also use a full-market daily price panel I downloaded myself (TWSE + TPEx, 2015 to 2026/09, including delisted stocks and adjusted for capital reductions) and US data (TSM, ^SOX), stored in `data/prices/`.
+Study 4 also uses MOPS material announcements I fetched myself (267 stocks, 2019 to 2026/10, `scripts/fetch_mops.py`), stored in `data/mops/`.
 Against FinMind's 267 stocks, closing prices match on all 610k stock-days. Returns differ in only 38 cases, all ex-dividend adjustments during a stock's TPEx-listed period that the original FinMind pipeline missed.
 
 ## Running
@@ -88,6 +92,17 @@ python scripts/12_volume_replication.py --final # 2025-01 .. 2026-09 replication
 python scripts/15_oos_2026.py power             # power simulation (periods already used only)
 python scripts/15_oos_2026.py volume --final    # third study 3 test: run once after 2027-09-30, when the data is complete
 python scripts/15_oos_2026.py honhai --final    # 2317 intraday signal: run once after 2028-09-30
+
+# Study 4: news and discussion around large moves (docs/large_moves.md)
+python scripts/16_large_moves.py names          # name matching, round 1; recheck and rules are round 2 and the final rules (settled; do not resample with --force)
+python scripts/16_large_moves.py events         # abnormal returns, large-move days, follow-on events, control days
+python scripts/16_large_moves.py windows        # news and PTT counts in five windows per stock-day, about 10 minutes the first time
+python scripts/16_large_moves.py analyze        # development-period P1-P4 (run once already; do not rerun)
+python scripts/fetch_mops.py                    # MOPS announcements 2019-2023, about 1.5 hours; add --start 2024 --end 2026 for period A
+python scripts/16_large_moves.py supplement     # supplementary analysis with MOPS announcements (run once already)
+python scripts/17_large_moves_prereg.py power   # power (development period only)
+python scripts/17_large_moves_prereg.py final A # out-of-sample test, 2024-01 to 2026-09 (run once already; do not rerun)
+python scripts/17_large_moves_prereg.py final B # 2026-10 to 2027-09: run once after the period ends and the data is complete
 ```
 
 - Steps 2-5 and 13 accept `--ticker` and `--method` (`lexicon` / `classifier_weak` / `classifier_llm` / `classifier_llm_pooled` / `classifier_bert`).
@@ -102,8 +117,9 @@ python scripts/15_oos_2026.py honhai --final    # 2317 intraday signal: run once
 - Time alignment (`calendar.py`): a post before the 13:30 close counts toward that day; later posts, weekends and holidays count toward the next trading day. Features for day t use only posts visible before day t's close. With `--target open_to_close` the day is cut at 09:00 instead, so features run up to the open of t+1.
 - Returns (`prices.py`): adjusted with reference prices on ex-rights/ex-dividend dates. Returns beyond the price limit that cannot be adjusted are set to missing.
 - Validation: development and final test periods are kept separate. I commit the hypotheses, thresholds and test code first, run the final test once, and record the result whichever way it goes.
-  2024 and 2025-01 to 2026-09 have both been used up, so new ideas have to be tested on data from 2026-10 onward.
-  Data from 2026-10 onward is already preregistered for a third study 3 test and the 2317 intraday signal ([PREREGISTRATION_2026.md](docs/prereg/PREREGISTRATION_2026.en.md)).
+  The hypotheses of studies 1-3 have used up 2024 and 2025-01 to 2026-09.
+  Study 4 is a new hypothesis, so its out-of-sample test uses 2024-01 to 2026-09, which it had not touched; study 3 had already looked at a closely related relationship over the same period, and the preregistration says so.
+  Data from 2026-10 onward is preregistered for a third study 3 test, the 2317 intraday signal ([PREREGISTRATION_2026.md](docs/prereg/PREREGISTRATION_2026.en.md)), and the study 4 replication ([PREREGISTRATION_LARGE_MOVES.md](docs/prereg/PREREGISTRATION_LARGE_MOVES.md)).
 
 ## Study 1: daily sentiment and next-day returns
 
@@ -239,23 +255,69 @@ In the development period, with only the night session as a control, discussion 
 - Monthly discussion of Evergreen since 2025 is only about 1/8 of what it was before (about 380k comments in 2019-2024, 13k in 2025-01 to 2026-09), yet its increment is still the largest of the three.
 - The replication covers 420 trading days; 395 of them have trading volume for all three stocks.
 
+## Study 4: news and discussion around large moves
+
+Studies 1-3 use PTT to predict prices or volume. This one goes the other way: find the days a stock moved unusually far, then look back at the news and discussion around them.
+
+- Events: 267 stocks; the absolute abnormal return (net of β × market) is ≥ 3σ and ≥ 3%.
+  Ex-rights days, disposition periods and the first day after a trading halt are excluded. A large move within 5 trading days of an earlier one counts as a continuation and stays out of the main analysis.
+  The development period, 2019-03 to 2023-11, has 3,656 main events (2,671 up, 985 down). Control days are days with no event in the 5 days before or after, for the same stock.
+- Name matching: two-character short names often collide with ordinary words (冠軍 "champion", 全國 "nationwide", 新興 "emerging", 統一 "unify"). I used cnyes stock tags to flag 76 stocks and hand-checked samples of PTT titles in two rounds.
+  The 19 short names below 80% precision match by ticker only, and the year-like tickers (2006-2015) match by name only. The rules were committed before any events were computed.
+- Windows: the week before, pre-open (previous close to 09:00), intraday, next day, and the week after.
+- Regressions: stock × year and date fixed effects, with standard errors two-way clustered by stock and date.
+
+Development period 2019-2023, primary tests (BH correction, FDR 10%):
+
+| Test | Coefficient | t | Verdict |
+|---|---|---|---|
+| P1 pre-open PTT abnormal → large move that day | +0.0060 | 7.87 | **Passed** |
+| P2 previous-week PTT abnormal → large move that day | −0.0024 | −5.58 | Failed (wrong sign) |
+| P3 large moves with no cnyes news → next 5 days | −0.50% | −1.48 | Failed |
+| P4 same, next 20 days | +0.03% | 0.06 | Failed |
+
+1. News and discussion mostly come after the price has moved. cnyes news does not rise in the week before a large move; news and PTT pick up from the pre-open window and peak intraday and the next day.
+   The day-trade share is 10 points above normal on large up days and unchanged on large down days.
+2. Most large moves have no identifiable news. Between the previous close and the day's close, 82.5% have no cnyes headline; adding MOPS material announcements, 69.6% still have neither.
+   94% of MOPS announcements are filed after the close, and they cluster on the night before a large move: 22% of large down days had one the night before, against 7.5% of ordinary days.
+3. Moves without news show no clear reversal. Their next 5 days trail moves with news by 0.5%, in the direction the US literature finds (Chan 2003), but not significantly.
+   Events that closed locked at the price limit continue by 1.75% over the next 5 days, consistent with study 2.
+4. P1 is not just relaying announcements. This analysis was added after seeing P1. With MOPS announcements as controls, the coefficient falls from 0.0060 to 0.0050.
+   Splitting the pre-open window at 08:30, the signal is almost all before 08:30 (t = 5.95); the 08:30-09:00 trial-matching window gives 0.0004 (t = 0.34), so the discussion is not a reaction to indicative opening prices.
+
+Preregistered out-of-sample test L1, using the specification from the supplementary analysis: PTT abnormal from the previous close to 08:30, controlling for cnyes news, MOPS announcements, and price and volume.
+
+| | Period | Main events | Coefficient | t | Per +1 SD | Verdict |
+|---|---|---|---|---|---|---|
+| Development (reference) | 2019-03 to 2023-11 | 3,656 | 0.0047 | 5.95 | — | — |
+| **A** | 2024-01 to 2026-09 | 2,277 | 0.0051 | 4.61 | +0.29 points (base rate 1.35%) | **Passed** |
+| B | 2026-10 to 2027-09 | — | — | — | — | runs after 2027-09-30 |
+
+- The coefficient in A is no smaller than in development, and t matches the 4.49 expected beforehand.
+- The L1 specification was chosen after seeing the development period, and study 3 had already looked at a related relationship (pre-open discussion → volume and range) over period A.
+- The signal predicts whether a large move happens, not its direction, so it cannot decide long or short.
+- Monthly revenue filing times are not controlled: MOPS history has the amounts but not when they were filed.
+
 ## Next steps
 
 1. Change the target. My first attempt used post counts cut at 13:30 to predict the next day's |return|, and it added nothing beyond past volatility
    (out-of-sample MSE change 2330 −0.2%, 2603 +0.1%, 2317 +0.4%, all CIs contain 0; the in-sample t = 3.2 for 2603 comes from heavy posting and high volatility coinciding in the 2021 shipping boom).
    Switching to discussion between the close and the next open is what worked (study 3). 5-day returns or returns relative to the market are also worth trying.
 2. Add controls. The sentiment models do not yet include news volume or the night session, and institutional investor flows are not used anywhere yet. Study 3 does not yet control for freight rates (Evergreen), Apple and Nvidia (Hon Hai), or earnings call and monthly revenue release dates.
+   Study 4 now includes MOPS announcements, which cover most earnings calls, financial reports and dividends. Monthly revenue filing times cannot be recovered for past years; they can only be collected from now on by fetching MOPS's same-day filings (t51sb10) every day.
 3. Trade less often. I have tried weekly frequency, trading only on extreme sentiment, and predicting returns relative to the market; none of the 12 pre-specified tests passed FDR correction
    ([docs/explore_directions.md](docs/explore_directions.en.md)).
 4. Cover more stocks. Of 301 stocks scanned, only 2330, 2603 and 2317 had a median of ≥ 20 comments per trading day in 2019-2023.
    UMC, Yang Ming, China Steel and AUO had enough only around 2021, almost all others had ≤ 5, and short names such as 統一, 南亞, 大成 and 華電 mostly collide with other words.
-   A daily panel is not feasible. It would need weekly frequency, or a cross-stock event study on days when discussion spikes.
+   A daily panel is not feasible. It would need weekly frequency or a cross-stock event study. Study 4 is the latter: large-move days across 267 stocks are the events, and colliding short names match by ticker only after a hand check.
 5. Test on new out-of-sample data. A third study 3 test is preregistered for target dates 2026-10-01 to 2027-09-30 and runs once after the period ends.
    With the 2025-26 effect, its power is about 75% ([PREREGISTRATION_2026.md](docs/prereg/PREREGISTRATION_2026.en.md)).
 6. Check an intraday price-and-volume signal for 2317. A logit using only price and volume to predict Hon Hai's next-day intraday direction beats 96% of random positions in gross return in the development period and 97% in 2024.
    With futures costs, its long-short returns +64% and +16%, against +23% and −27% for shorting every day over the same periods. I picked it out of 36 combinations and it has nothing to do with PTT.
    The random-position test overstates significance when long days cluster; with a Newey-West t test instead, the development period gives only t = 1.40.
    It is preregistered for target dates 2026-10-01 to 2028-09-30; power is at most about 40%, so a failure would only count as inconclusive.
+7. Finish study 4. Part 3 of the plan, not done yet, has an LLM classify the news and MOPS announcements behind each large move (monthly revenue, earnings, company events, industry themes, flows), checked against 100 hand-labelled events.
+   Power for period B (2026-10 to 2027-09) is about 86% if the effect matches the development period and about 39% at half that.
 
 ## Layout
 
@@ -276,12 +338,16 @@ src/pttsent/
   event_study.py      abnormal returns, two-way clustered standard errors, calendar-time portfolios
   volume.py           pre-open discussion volume, night-session and US alignment, rolling OLS, Clark–West test
   explore.py          weekly data, extreme-sentiment days, tests of return differences on extreme days, hedged excess returns
+  large_moves.py      study 4: name matching, abnormal returns and large-move days, window counts, fixed-effects regressions with two-way clustering
+  mops.py             parsing MOPS material announcements
 scripts/              01–06, 13, 14 study 1; 07–10, fetch_prices.py, build_panel.py study 2; 11, 12, fetch_us.py study 3; 15 out-of-sample tests from 2026-10;
+                      16, 17, fetch_mops.py study 4;
                       train_classifier.py, llm_label.py train the sentiment classifiers
 tests/                invariants: time alignment, no look-ahead, costs
 docs/                 Chinese originals, with English translations in *.en.md
   sentiment.md        study 1 details (text attribution, LLM labelling, classifier and BERT accuracy, backtests and extra results)
   explore_directions.md  plan and results for weekly, extreme-sentiment and excess-return exploration
+  large_moves.md      study 4 plan, name check, results and supplementary analysis (Chinese only for now); large_moves/ holds the name check sheets and matching rules
   report_outline.md   capstone report outline (Chinese only)
-  prereg/             five preregistrations with results: studies 1, 2, 3, the study 3 replication, and the out-of-sample tests from 2026-10
+  prereg/             six preregistrations with results: studies 1, 2, 3, the study 3 replication, the out-of-sample tests from 2026-10, and study 4
 ```
