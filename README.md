@@ -21,7 +21,7 @@ The PTT corpus, the FinMind prices for the 267-stock universe, and the ex-rights
 | 1. Daily sentiment | Does it predict next-day returns? | **No.** Sentiment reacts to prices that have already moved; the only hint in the development period did not recur in 2024; predicting returns and going long-short on the sign fails as well | [PREREGISTRATION.md](docs/prereg/PREREGISTRATION.en.md) |
 | 2. [標的] posts | Do the long/short calls authors declare predict later returns? | **No.** Authors chase rallies; the small gap comes from continuation after limit-locked closes, and buying on bullish posts loses money after costs | [PREREGISTRATION_TARGET.md](docs/prereg/PREREGISTRATION_TARGET.en.md) |
 | 3. Pre-open discussion volume | Does discussion between the close and the next open predict that day's trading volume? | **Yes**, but the effect is small (out-of-sample MSE down 0.5-3%); passed both out-of-sample tests, 2024 and 2025-2026 | [PREREGISTRATION_VOLUME.md](docs/prereg/PREREGISTRATION_VOLUME.en.md), [replication](docs/prereg/PREREGISTRATION_VOLUME_REPLICATION.en.md) |
-| 4. Large moves | Do news and discussion show anything before a stock's large up or down days? | **Pre-open discussion signals whether the day will bring a large move** (direction unknown): after controlling for cnyes news and MOPS announcements it passed out of sample, 2024-01 to 2026-09 (t = 4.61). About 70% of large moves have neither a cnyes headline nor a MOPS announcement that day; moves without news show no clear reversal afterwards | [PREREGISTRATION_LARGE_MOVES.md](docs/prereg/PREREGISTRATION_LARGE_MOVES.md) (Chinese only) |
+| 4. Large moves | Do news and discussion show anything before a stock's large up or down days? | **Pre-open discussion signals whether the day will bring a large move** (direction unknown): after controlling for cnyes news and MOPS announcements it passed out of sample, 2024-01 to 2026-09 (t = 4.61). LLM attribution (κ = 0.63 against hand labels) finds no cause in the surrounding week's news and announcements for over half of large moves; identified causes are mostly industry themes, earnings and company events; moves without news show no clear reversal afterwards | [PREREGISTRATION_LARGE_MOVES.md](docs/prereg/PREREGISTRATION_LARGE_MOVES.md) (Chinese only) |
 
 PTT reflects prices that have already moved, but it does signal whether the day will be busier than usual and whether a large move is coming, though not which way.
 Details for study 1 are in [docs/sentiment.md](docs/sentiment.en.md), for studies 2 and 3 in their [preregistration documents](docs/prereg/), and for study 4 in [docs/large_moves.md](docs/large_moves.md) (Chinese only for now). The documents under `docs/` are written in Chinese; the `.en.md` files are English translations added later, and the Chinese originals are the registered versions.
@@ -103,6 +103,9 @@ python scripts/16_large_moves.py supplement     # supplementary analysis with MO
 python scripts/17_large_moves_prereg.py power   # power (development period only)
 python scripts/17_large_moves_prereg.py final A # out-of-sample test, 2024-01 to 2026-09 (run once already; do not rerun)
 python scripts/17_large_moves_prereg.py final B # 2026-10 to 2027-09: run once after the period ends and the data is complete
+python scripts/18_large_moves_causes.py build   # cause classification: build LLM inputs, samples and the hand-labelling sheet (no cost)
+python scripts/18_large_moves_causes.py submit --effort low   # send to the Batches API, about $9 (run once already); then status, collect
+python scripts/18_large_moves_causes.py report  # category shares, agreement and κ against hand labels
 ```
 
 - Steps 2-5 and 13 accept `--ticker` and `--method` (`lexicon` / `classifier_weak` / `classifier_llm` / `classifier_llm_pooled` / `classifier_bert`).
@@ -298,6 +301,24 @@ Preregistered out-of-sample test L1, using the specification from the supplement
 - The signal predicts whether a large move happens, not its direction, so it cannot decide long or short.
 - Monthly revenue filing times are not controlled: MOPS history has the amounts but not when they were filed.
 
+Causes of large moves (descriptive): Claude Opus 5.5 sorts each event's cnyes news, MOPS announcement subjects and PTT titles from the surrounding week into 7 categories (`18_large_moves_causes.py`, cost $9.36).
+Before seeing any answers I hand-labelled 100 events: 72% agreement, κ = 0.63, just above the pre-set threshold of 0.6.
+
+| Category (3,526 main events, development period) | As specified | Strict rule (post hoc) |
+|---|---|---|
+| No cnyes news and no MOPS announcement in the surrounding week | 38.6% | 38.6% |
+| News exists, but no cause found | 17.2% | 34.2% |
+| Industry themes | 12.9% | 9.3% |
+| Earnings, guidance, earnings calls | 13.8% | 7.9% |
+| Company events | 12.2% | 7.6% |
+| Monthly revenue, analyst reports and flows, price-only reports, other | 5.4% | 2.4% |
+
+1. The LLM is more lenient than I am. In 22 of the 28 disagreements I found no cause while the LLM inferred one from timing alone, for example when the night before had only a "board approved the quarterly report" subject line.
+   Counting the LLM's low-confidence answers as no cause (a rule chosen after seeing the validation) gives 82% agreement and κ = 0.72. Either way, over half of large moves have no identifiable cause (56% and 73%).
+2. Large moves lean toward industry themes. Compared with ordinary days that have news, industry themes are 21% against 13%, and the company's own events 20% against 30%. Industry themes are 15.5% of large up moves but only 5.7% of large down moves.
+3. Causes are mostly public before the open: 70% of identified causes appear before the open. Over 80% of earnings and company-event causes are announcements from the night before; a third of industry themes appear intraday, and 40% of analyst reports come after the close, which looks like explanation after the fact.
+4. Monthly revenue is only 2%, which may be a data limit: monthly revenue filings are not MOPS material announcements, so only those that made a cnyes headline are visible.
+
 ## Next steps
 
 1. Change the target. My first attempt used post counts cut at 13:30 to predict the next day's |return|, and it added nothing beyond past volatility
@@ -316,8 +337,9 @@ Preregistered out-of-sample test L1, using the specification from the supplement
    With futures costs, its long-short returns +64% and +16%, against +23% and −27% for shorting every day over the same periods. I picked it out of 36 combinations and it has nothing to do with PTT.
    The random-position test overstates significance when long days cluster; with a Newey-West t test instead, the development period gives only t = 1.40.
    It is preregistered for target dates 2026-10-01 to 2028-09-30; power is at most about 40%, so a failure would only count as inconclusive.
-7. Finish study 4. Part 3 of the plan, not done yet, has an LLM classify the news and MOPS announcements behind each large move (monthly revenue, earnings, company events, industry themes, flows), checked against 100 hand-labelled events.
-   Power for period B (2026-10 to 2027-09) is about 86% if the effect matches the development period and about 39% at half that.
+7. Study 4 from here:
+   - Power for period B (2026-10 to 2027-09) is about 86% if the effect matches the development period and about 39% at half that.
+   - The cause classification only has MOPS subject lines. With the full announcement text, filings such as "board approved the quarterly report" would show whether the news was good or bad, which is where the LLM and I disagreed most.
 
 ## Layout
 
@@ -340,14 +362,15 @@ src/pttsent/
   explore.py          weekly data, extreme-sentiment days, tests of return differences on extreme days, hedged excess returns
   large_moves.py      study 4: name matching, abnormal returns and large-move days, window counts, fixed-effects regressions with two-way clustering
   mops.py             parsing MOPS material announcements
+  causes.py           study 4: LLM inputs, prompt and output schema for classifying the causes of large moves
 scripts/              01–06, 13, 14 study 1; 07–10, fetch_prices.py, build_panel.py study 2; 11, 12, fetch_us.py study 3; 15 out-of-sample tests from 2026-10;
-                      16, 17, fetch_mops.py study 4;
+                      16, 17, 18, fetch_mops.py study 4;
                       train_classifier.py, llm_label.py train the sentiment classifiers
 tests/                invariants: time alignment, no look-ahead, costs
 docs/                 Chinese originals, with English translations in *.en.md
   sentiment.md        study 1 details (text attribution, LLM labelling, classifier and BERT accuracy, backtests and extra results)
   explore_directions.md  plan and results for weekly, extreme-sentiment and excess-return exploration
-  large_moves.md      study 4 plan, name check, results and supplementary analysis (Chinese only for now); large_moves/ holds the name check sheets and matching rules
+  large_moves.md      study 4 plan, name check, results, supplementary analysis and cause classification (Chinese only for now); large_moves/ holds the name check sheets, matching rules and hand labels for the cause classification
   report_outline.md   capstone report outline (Chinese only)
   prereg/             six preregistrations with results: studies 1, 2, 3, the study 3 replication, the out-of-sample tests from 2026-10, and study 4
 ```

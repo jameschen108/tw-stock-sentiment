@@ -19,7 +19,7 @@
 | 一、每日情緒 | 能預測隔天報酬嗎？ | **不能**。情緒在反應已發生的股價；開發期唯一的跡象在 2024 沒有重現；預測報酬、照正負號做多空也一樣 | [PREREGISTRATION.md](docs/prereg/PREREGISTRATION.md) |
 | 二、[標的] 文 | 作者自標的多空能預測之後的報酬嗎？ | **不能**。作者在追漲，小差距來自漲跌停鎖住的延續，跟著看多文買扣成本後賠錢 | [PREREGISTRATION_TARGET.md](docs/prereg/PREREGISTRATION_TARGET.md) |
 | 三、開盤前討論量 | 收盤後到開盤前的討論量能預測當天成交量嗎？ | **能**，但效果小（樣本外 MSE 降 0.5–3%）；2024 與 2025–2026 兩次樣本外檢定都通過 | [PREREGISTRATION_VOLUME.md](docs/prereg/PREREGISTRATION_VOLUME.md)、[重複驗證](docs/prereg/PREREGISTRATION_VOLUME_REPLICATION.md) |
-| 四、大漲跌日 | 個股大漲大跌之前，新聞與討論有沒有跡象？ | **開盤前的討論量能預告當天會不會大漲跌**（不分方向）：扣掉鉅亨新聞與重大訊息後，2024-01 到 2026-09 樣本外通過（t = 4.61）。大漲跌當天約 7 成找不到鉅亨頭條或重大訊息；沒新聞的大漲跌之後沒有明顯反轉 | [PREREGISTRATION_LARGE_MOVES.md](docs/prereg/PREREGISTRATION_LARGE_MOVES.md) |
+| 四、大漲跌日 | 個股大漲大跌之前，新聞與討論有沒有跡象？ | **開盤前的討論量能預告當天會不會大漲跌**（不分方向）：扣掉鉅亨新聞與重大訊息後，2024-01 到 2026-09 樣本外通過（t = 4.61）。用 LLM 歸因（人工驗證 κ = 0.63），過半的大漲跌在前後一週的新聞與公告裡找不到原因；找得到的多是產業題材、財報與公司事件；沒新聞的大漲跌之後沒有明顯反轉 | [PREREGISTRATION_LARGE_MOVES.md](docs/prereg/PREREGISTRATION_LARGE_MOVES.md) |
 
 PTT 反映的是已經發生的價格，但能預告當天會不會比較熱、會不會大漲跌，只是不能告訴你方向。
 研究一的細節在 [docs/sentiment.md](docs/sentiment.md)，研究二、三的細節在各自的[預先登記文件](docs/prereg/)，研究四在 [docs/large_moves.md](docs/large_moves.md)。
@@ -88,6 +88,9 @@ python scripts/16_large_moves.py supplement     # 加入重大訊息的補充分
 python scripts/17_large_moves_prereg.py power   # 檢定力（只用開發期）
 python scripts/17_large_moves_prereg.py final A # 2024-01 .. 2026-09 樣本外檢定（已跑過，不要再跑）
 python scripts/17_large_moves_prereg.py final B # 2026-10 .. 2027-09：期間結束、資料補齊後跑一次
+python scripts/18_large_moves_causes.py build   # 原因分類：組 LLM 的輸入、抽樣、產生人工驗證表（不花錢）
+python scripts/18_large_moves_causes.py submit --effort low   # 送 Batches API，約 9 美元（已跑過）；之後 status、collect
+python scripts/18_large_moves_causes.py report  # 各類別比例、和人工標註的一致率與 κ
 ```
 
 - 步驟 2–5 與 13 可加 `--ticker`、`--method`（`lexicon` / `classifier_weak` / `classifier_llm` / `classifier_llm_pooled` / `classifier_bert`）；
@@ -283,6 +286,24 @@ python scripts/17_large_moves_prereg.py final B # 2026-10 .. 2027-09：期間結
 - 這個訊號預測的是會不會大漲跌，不是方向，不能拿來決定做多或放空。
 - 月營收的申報時間還沒控制：公開資訊觀測站的歷史資料只有金額，沒有申報時間。
 
+**大漲跌的原因（描述）**：用 Claude Opus 5.5 把每個事件前後一週的鉅亨新聞、重大訊息主旨與 PTT 標題分成 7 類（`18_large_moves_causes.py`，費用 9.36 美元）。
+我先在看不到答案的情況下人工標 100 個事件：一致率 72%、κ = 0.63，剛好超過事先定的門檻 0.6。
+
+| 類別（開發期主要事件 3,526 個） | 原設定 | 嚴格規則（事後） |
+|---|---|---|
+| 前後一週沒有鉅亨新聞，也沒有重大訊息 | 38.6% | 38.6% |
+| 有消息，但找不到原因 | 17.2% | 34.2% |
+| 產業題材 | 12.9% | 9.3% |
+| 財報、財測、法說會 | 13.8% | 7.9% |
+| 公司重大事件 | 12.2% | 7.6% |
+| 月營收、法人籌碼、只描述股價、其他 | 5.4% | 2.4% |
+
+1. **LLM 比人寬鬆**：不一致的 28 個事件中，22 個是我判斷找不到原因，LLM 卻依時間上的巧合推測了原因，例如前一晚只有「董事會通過季報」的主旨。
+   把 LLM 信心 low 的都算成找不到原因（這是看過驗證之後才定的規則），一致率 82%、κ = 0.72。兩種算法下，找不到原因的都超過一半（56%、73%）。
+2. **大漲跌日比較常是產業題材**：和平常有消息的日子比，產業題材 21% 對 13%，公司自己的重大事件 20% 對 30%。產業題材佔大漲的 15.5%，只佔大跌的 5.7%。
+3. **原因多半在開盤前就公布了**：找得到原因的事件中，70% 的原因在開盤前公布。財報與公司事件八成以上是前一晚的公告；產業題材有三分之一在盤中才出現，法人報告有四成在收盤後，比較像事後解釋。
+4. 月營收只佔 2%，可能是資料限制：月營收申報不在重大訊息裡，只有上了鉅亨頭條的才看得到。
+
 ## 可以往哪裡做
 
 1. **換預測目標**：最早試的是 13:30 切日的發文量預測隔天 |報酬|，在過去波動之外沒有增量
@@ -301,8 +322,9 @@ python scripts/17_large_moves_prereg.py final B # 2026-10 .. 2027-09：期間結
    期貨成本下多空 +64%、+16%，同期每天放空是 +23%、−27%。這是 36 組裡挑出來的，而且和 PTT 無關。
    隨機部位檢定在做多日集中時會高估顯著性，改用 Newey–West t 檢定後，開發期只有 t = 1.40。
    已預先登記，目標日 2026-10-01 .. 2028-09-30；檢定力最多約 40%，沒通過只能算無法判定。
-7. **研究四還沒做的**：計畫裡的第三部分，是用 LLM 把每個大漲跌的新聞與重大訊息分成月營收、財報、公司事件、產業題材、籌碼等類別，再由人工標 100 個事件驗證。
-   評估期 B（2026-10 .. 2027-09）的檢定力：效果和開發期相同時約 86%，只有一半時約 39%。
+7. **研究四接下來**：
+   - 評估期 B（2026-10 .. 2027-09）的檢定力：效果和開發期相同時約 86%，只有一半時約 39%。
+   - 原因分類的重大訊息只有主旨。補抓全文之後，「通過季報」這類公告就看得出好壞，這也是人和 LLM 最常不一致的地方。
 
 ## 目錄
 
@@ -325,14 +347,15 @@ src/pttsent/
   explore.py          週頻資料、情緒極端日、極端日報酬差檢定、對沖後的超額報酬
   large_moves.py      研究四：名稱比對、超額報酬與大漲跌日、時間窗則數、固定效果＋雙向 cluster 迴歸
   mops.py             公開資訊觀測站重大訊息的解析
+  causes.py           研究四：大漲跌原因分類的 LLM 輸入、提示詞與輸出格式
 scripts/              01–06、13、14 研究一；07–10、fetch_prices.py、build_panel.py 研究二；11、12、fetch_us.py 研究三；15 2026-10 起的樣本外檢定；
-                      16、17、fetch_mops.py 研究四；
+                      16、17、18、fetch_mops.py 研究四；
                       train_classifier.py、llm_label.py 訓練情緒分類器
 tests/                時間對齊、不偷看未來、成本等不變量
 docs/
   sentiment.md        研究一的細節（文字歸屬、LLM 標註、分類器與 BERT 的準確度、回測與補充結果）
   explore_directions.md  週頻、情緒極端、超額報酬的探索計畫與結果
-  large_moves.md      研究四的計畫、名稱檢查、結果與補充分析；large_moves/ 是名稱檢查表與比對規則
+  large_moves.md      研究四的計畫、名稱檢查、結果、補充分析與原因分類；large_moves/ 是名稱檢查表、比對規則與原因分類的人工標註
   report_outline.md   專題報告大綱
   prereg/             六份預先登記與結果：研究一、研究二、研究三、研究三的重複驗證、2026-10 起的樣本外檢定、研究四
 ```
