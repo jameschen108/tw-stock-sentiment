@@ -285,12 +285,31 @@ def cmd_report(cfg):
             f.write(f"## {k}\n{t.round(3).to_string()}\n\n")
             print(f"## {k}\n{t.round(3).to_string()}\n")
 
+    # 事後的嚴格規則（看過人工驗證之後才加的敏感度分析）：LLM 信心 low 的都算找不到原因
+    strict = ev["category"].where(~((ev["confidence"] == "low") & ~ev["category"].isin([C.NO_NEWS])), C.NOT_FOUND)
+    main_strict = strict[main.index]
+    with open(output_path(cfg, "large_moves", "causes_tables.txt"), "a") as f:
+        t = pd.crosstab(main_strict, main["up"].map({True: "大漲", False: "大跌"}), margins=True, normalize="columns")
+        t = t.reindex([c for c in cats if c in t.index])
+        f.write(f"## 事後的嚴格規則（信心 low 算找不到原因）\n{t.round(3).to_string()}\n\n")
+        print(f"## 事後的嚴格規則（信心 low 算找不到原因）\n{t.round(3).to_string()}\n")
+
+    # 人工驗證：人工只標 7 類，所以 LLM 的「其他：找不到原因」先併回「其他」再比
     lab = pd.read_csv(LABELS_CSV, dtype=str, keep_default_na=False, encoding="utf-8-sig")
-    lab = lab[lab["label"] != ""].merge(ev[["ev_id", "category"]], on="ev_id")
+    lab = lab[lab["label"] != ""].merge(ev[["ev_id", "category", "confidence"]], on="ev_id")
     if len(lab):
-        agree = float((lab["label"] == lab["category"]).mean())
-        print(f"人工驗證 {len(lab)} 個：一致率 {agree:.1%}，Cohen's κ = {C.cohen_kappa(lab['label'], lab['category']):.3f}")
-        print(pd.crosstab(lab["label"], lab["category"]).to_string())
+        lab["llm"] = lab["category"].replace({C.NOT_FOUND: "其他"})
+        lab["llm_strict"] = lab["llm"].where(lab["confidence"] != "low", "其他")
+        rows = []
+        for col, name in (("llm", "原設定"), ("llm_strict", "事後嚴格規則")):
+            rows.append({"版本": name, "n": len(lab), "一致率": float((lab["label"] == lab[col]).mean()),
+                         "kappa": C.cohen_kappa(lab["label"], lab[col])})
+        by_conf = lab.groupby("confidence").apply(lambda g: pd.Series({"n": len(g), "一致率": (g["label"] == g["llm"]).mean()}))
+        val = pd.DataFrame(rows)
+        val.to_csv(output_path(cfg, "large_moves", "causes_validation.csv"), index=False, encoding="utf-8-sig")
+        print(val.round(3).to_string(index=False))
+        print("依 LLM 信心：\n" + by_conf.round(3).to_string())
+        print(pd.crosstab(lab["label"], lab["llm"]).reindex(index=C.CATEGORIES, columns=C.CATEGORIES, fill_value=0).to_string())
 
 
 def main():
