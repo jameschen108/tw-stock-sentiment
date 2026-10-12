@@ -130,3 +130,21 @@ def test_causes_timing_and_kappa():
     assert timing(pd.Series([], dtype="datetime64[ns]"), t) == "none"
     assert cohen_kappa("aabb", "aabb") == 1
     assert abs(cohen_kappa("aabb", "abab")) < 1e-12      # 一致率 0.5，等於隨機
+
+
+def test_direction_early_window_and_daily_sent():
+    from pttsent.direction import _early, daily_sent
+    days = pd.DatetimeIndex(pd.bdate_range("2024-01-01", periods=10))
+    times = pd.Series(pd.to_datetime([
+        "2024-01-04 13:30",   # 前一天收盤後 -> 1/5 的開盤前
+        "2024-01-05 08:29",   # 08:30 前
+        "2024-01-05 08:30",   # 試撮，不算
+        "2024-01-05 10:00",   # 盤中，不算
+    ]))
+    assert _early(times, days).tolist() == [True, True, False, False]
+    t = pd.DataFrame({"code": "A", "pos": 4, "account": ["a", "a", "b", "c", "d"],
+                      "score": [1.0, 0.0, -1.0, 1.0, np.nan]})
+    s = daily_sent(t).iloc[0]
+    assert s["n_accounts"] == 3                      # d 沒有分數
+    assert np.isclose(s["sent"], (0.5 - 1 + 1) / 3)  # 帳號內先平均
+    assert np.isnan(daily_sent(t[t["account"] != "c"]).iloc[0]["sent"])   # 少於 3 個帳號
