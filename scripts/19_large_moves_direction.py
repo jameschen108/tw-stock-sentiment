@@ -3,6 +3,7 @@
     python scripts/19_large_moves_direction.py texts     # 抽出每檔在 t−1 收盤到 t 08:30 之間的 PTT 文字
     python scripts/19_large_moves_direction.py score     # BERT 打情緒分數（Apple GPU 約 1–2 小時，可中斷後接續）
     python scripts/19_large_moves_direction.py analyze   # D1、D2 與次要結果；計畫和程式都 commit 之後才會跑
+    python scripts/19_large_moves_direction.py gapcheck  # 事後檢查：控制開盤跳空（C1–C3）
 
 中間產物在 data/interim/large_moves/direction/，結果在 output/large_moves/direction_*.csv。
 """
@@ -100,11 +101,12 @@ def build(cfg) -> pd.DataFrame:
     full["ar1"] = g.shift(1)
     full["ar5"] = sum(g.shift(j) for j in range(1, 6))
     panel = pd.read_parquet(work_path(cfg, "prices", "panel.parquet"),
-                            columns=["date", "code", "oc", "limit_up_open", "limit_down_open"])
+                            columns=["date", "code", "oc", "gap", "limit_up_open", "limit_down_open"])
     w = w.merge(full[["code", "date", "ar1", "ar5"]], on=["code", "date"], how="left")
     w = w.merge(panel.drop_duplicates(["code", "date"]), on=["code", "date"], how="left")
     w["ar1_z"] = w["ar1"] / w["sigma"]
     w["ar5_z"] = w["ar5"] / w["sigma"]
+    w["gap_z"] = w["gap"].where(w["gap"].abs() <= 0.105) / w["sigma"]
 
     split = lm.preopen_split(w, pd.read_parquet(work_path(cfg, "interim", "large_moves", "ptt_items.parquet")), days)
     w["ptt_abn_pre_early"] = np.log1p(split["pre_early"]) - w["ptt_base"]
@@ -165,12 +167,36 @@ def cmd_analyze(cfg):
     print(f"\n樣本：D1 事件 {int(ev['sent'].notna().sum())} / {len(ev)}；D2 {int(f2.nobs)} 天")
 
 
+def cmd_gapcheck(cfg):
+    """計畫「事後檢查」一節：D1、D2 加上開盤跳空。"""
+    if not committed(REGISTERED):
+        sys.exit("計畫或程式有沒 commit 的修改；先 commit 再跑")
+    w = build(cfg)
+    ev = w[w["main"]].assign(y=lambda x: x["up"].astype(float)).dropna(subset=["sent", "gap_z", "oc"])
+    d2 = w[w["eligible"] & ~w["followon"] & ~w["open_locked"] & (w["ptt_abn_pre_early"] >= D.D2_ABN_MIN)]
+    d2 = d2.dropna(subset=["sent", "gap_z"])
+    rows = [
+        {"檢查": "D2（同一樣本，不加跳空）", **one_sided(lm.fe_ols(d2, "oc", ["sent"] + CONTROLS, ["date"]), "sent")},
+        {"檢查": "C1：D2 加跳空", **one_sided(lm.fe_ols(d2, "oc", ["sent", "gap_z"] + CONTROLS, ["date"]), "sent")},
+        {"檢查": "D1（同一樣本，不加跳空）", **one_sided(lm.fe_ols(ev, "y", ["sent"] + CONTROLS, ["year"]), "sent")},
+        {"檢查": "C2：D1 加跳空", **one_sided(lm.fe_ols(ev, "y", ["sent", "gap_z"] + CONTROLS, ["year"]), "sent")},
+        {"檢查": "C3：D1 樣本，情緒 → 跳空 gap_z", **one_sided(lm.fe_ols(ev, "gap_z", ["sent"] + CONTROLS, ["year"]), "sent")},
+        {"檢查": "C3：D1 樣本，情緒 → 盤中 oc", **one_sided(lm.fe_ols(ev, "oc", ["sent"] + CONTROLS, ["year"]), "sent")},
+    ]
+    f = lm.fe_ols(d2, "oc", ["sent", "gap_z"] + CONTROLS, ["date"])
+    out = pd.DataFrame(rows)
+    out.to_csv(output_path(cfg, "large_moves", "direction_gapcheck.csv"), index=False, encoding="utf-8-sig")
+    print(out.round(4).to_string(index=False))
+    print(f"\nC1 的跳空係數 {f.params['gap_z']:.5f}（t = {f.tvalues['gap_z']:.2f}）；"
+          f"D2 樣本中 corr(sent, gap_z) = {np.corrcoef(d2['sent'], d2['gap_z'])[0, 1]:.3f}")
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["texts", "score", "analyze"])
+    ap.add_argument("cmd", choices=["texts", "score", "analyze", "gapcheck"])
     a = ap.parse_args()
     cfg = load_config()
-    {"texts": cmd_texts, "score": cmd_score, "analyze": cmd_analyze}[a.cmd](cfg)
+    {"texts": cmd_texts, "score": cmd_score, "analyze": cmd_analyze, "gapcheck": cmd_gapcheck}[a.cmd](cfg)
 
 
 if __name__ == "__main__":
