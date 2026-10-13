@@ -19,9 +19,9 @@
 | 一、每日情緒 | 能預測隔天報酬嗎？ | **不能**。情緒在反應已發生的股價；開發期唯一的跡象在 2024 沒有重現；預測報酬、照正負號做多空也一樣 | [PREREGISTRATION.md](docs/prereg/PREREGISTRATION.md) |
 | 二、[標的] 文 | 作者自標的多空能預測之後的報酬嗎？ | **不能**。作者在追漲，小差距來自漲跌停鎖住的延續，跟著看多文買扣成本後賠錢 | [PREREGISTRATION_TARGET.md](docs/prereg/PREREGISTRATION_TARGET.md) |
 | 三、開盤前討論量 | 收盤後到開盤前的討論量能預測當天成交量嗎？ | **能**，但效果小（樣本外 MSE 降 0.5–3%）；2024 與 2025–2026 兩次樣本外檢定都通過 | [PREREGISTRATION_VOLUME.md](docs/prereg/PREREGISTRATION_VOLUME.md)、[重複驗證](docs/prereg/PREREGISTRATION_VOLUME_REPLICATION.md) |
-| 四、大漲跌日 | 個股大漲大跌之前，新聞與討論有沒有跡象？ | **開盤前的討論量能預告當天會不會大漲跌**（不分方向）：扣掉鉅亨新聞與重大訊息後，2024-01 到 2026-09 樣本外通過（t = 4.61）。用 LLM 歸因（人工驗證 κ = 0.63），過半的大漲跌在前後一週的新聞與公告裡找不到原因；找得到的多是產業題材、財報與公司事件；沒新聞的大漲跌之後沒有明顯反轉 | [PREREGISTRATION_LARGE_MOVES.md](docs/prereg/PREREGISTRATION_LARGE_MOVES.md) |
+| 四、大漲跌日 | 個股大漲大跌之前，新聞與討論有沒有跡象？ | **開盤前的討論量能預告當天會不會大漲跌**（不分方向）：扣掉鉅亨新聞與重大訊息後，2024-01 到 2026-09 樣本外通過（t = 4.61）。用 LLM 歸因（人工驗證 κ = 0.63），過半的大漲跌在前後一週的新聞與公告裡找不到原因；找得到的多是產業題材、財報與公司事件；沒新聞的大漲跌之後沒有明顯反轉。**開盤前的情緒能稍微預告盤中方向**：2024-01 到 2026-09 樣本外通過（t = 2.08），但效果小到扣掉成本就沒了 | [PREREGISTRATION_LARGE_MOVES.md](docs/prereg/PREREGISTRATION_LARGE_MOVES.md)、[PREREGISTRATION_DIRECTION.md](docs/prereg/PREREGISTRATION_DIRECTION.md) |
 
-PTT 反映的是已經發生的價格，但能預告當天會不會比較熱、會不會大漲跌，只是不能告訴你方向。
+PTT 反映的是已經發生的價格，但開盤前的討論能預告當天會不會比較熱、會不會大漲跌；開盤前的情緒還能稍微預告盤中的方向，只是效果小到賺不到錢。
 研究一的細節在 [docs/sentiment.md](docs/sentiment.md)，研究二、三的細節在各自的[預先登記文件](docs/prereg/)，研究四在 [docs/large_moves.md](docs/large_moves.md)。
 
 ## 資料
@@ -91,6 +91,11 @@ python scripts/17_large_moves_prereg.py final B # 2026-10 .. 2027-09：期間結
 python scripts/18_large_moves_causes.py build   # 原因分類：組 LLM 的輸入、抽樣、產生人工驗證表（不花錢）
 python scripts/18_large_moves_causes.py submit --effort low   # 送 Batches API，約 9 美元（已跑過）；之後 status、collect
 python scripts/18_large_moves_causes.py report  # 各類別比例、和人工標註的一致率與 κ
+python scripts/19_large_moves_direction.py texts     # 開盤前情緒：抽出開盤前的 PTT 文字（docs/large_moves_direction.md）
+python scripts/19_large_moves_direction.py score     # BERT 打分數，Apple GPU 約 1 小時
+python scripts/19_large_moves_direction.py analyze   # 開發期 D1、D2（已跑過，不要再跑）；gapcheck 是控制開盤跳空的事後檢查
+python scripts/20_direction_prereg.py final A        # 2024-01 .. 2026-09 樣本外檢定（已跑過，不要再跑）；之前要先 score A、check A
+python scripts/20_direction_prereg.py final B        # 2026-10 .. 2029-09：期間結束、資料補齊後跑一次
 ```
 
 - 步驟 2–5 與 13 可加 `--ticker`、`--method`（`lexicon` / `classifier_weak` / `classifier_llm` / `classifier_llm_pooled` / `classifier_bert`）；
@@ -107,7 +112,7 @@ python scripts/18_large_moves_causes.py report  # 各類別比例、和人工標
 - **驗證**：開發期和最終測試期分開；假設、門檻與檢定程式先 commit，最終測試只跑一次，結果不論好壞都照實記錄。
   研究一到三的假設已經用掉 2024 與 2025-01 .. 2026-09。
   研究四是新的假設，它的樣本外檢定用 2024-01 .. 2026-09，因為這個假設在這段期間沒用過；但研究三已經在同一段期間看過相近的關係，登記文件裡有寫明。
-  2026-10 起的資料已經預先登記給研究三的第三次驗證、2317 盤中訊號（[PREREGISTRATION_2026.md](docs/prereg/PREREGISTRATION_2026.md)），以及研究四的重現（[PREREGISTRATION_LARGE_MOVES.md](docs/prereg/PREREGISTRATION_LARGE_MOVES.md)）。
+  2026-10 起的資料已經預先登記給研究三的第三次驗證、2317 盤中訊號（[PREREGISTRATION_2026.md](docs/prereg/PREREGISTRATION_2026.md)），研究四的重現（[PREREGISTRATION_LARGE_MOVES.md](docs/prereg/PREREGISTRATION_LARGE_MOVES.md)），以及開盤前情緒的重現（[PREREGISTRATION_DIRECTION.md](docs/prereg/PREREGISTRATION_DIRECTION.md)，到 2029-09）。
 
 ## 研究一：每日情緒 → 隔天報酬
 
@@ -304,6 +309,23 @@ python scripts/18_large_moves_causes.py report  # 各類別比例、和人工標
 3. **原因多半在開盤前就公布了**：找得到原因的事件中，70% 的原因在開盤前公布。財報與公司事件八成以上是前一晚的公告；產業題材有三分之一在盤中才出現，法人報告有四成在收盤後，比較像事後解釋。
 4. 月營收只佔 2%，可能是資料限制：月營收申報不在重大訊息裡，只有上了鉅亨頭條的才看得到。
 
+**開盤前的情緒與漲跌方向**（[docs/large_moves_direction.md](docs/large_moves_direction.md)）：討論量只說會不會大漲跌，這裡看同一段時間的情緒能不能說方向。
+前一天收盤到 08:30 提到這檔的 PTT 文字，用研究一的 BERT 分類器打分數，按帳號加權平均；有表達看法的帳號少於 3 個就不算。
+
+| 檢定 | 樣本 | 係數 | t | 判定 |
+|---|---|---|---|---|
+| D1 開盤前情緒 → 大漲還是大跌（開發期） | 233 個大漲跌事件 | 0.650 | 5.79 | 通過（BH 校正） |
+| D2 開盤前情緒 → 開盤到收盤的報酬，開盤前討論是平常 2.7 倍以上的日子（開發期） | 6,067 天 | 0.0047 | 2.78 | 通過（BH 校正） |
+| 事後：D2 再控制開盤跳空（開發期） | 6,067 天 | 0.0048 | 2.86 | — |
+| **E1 = 控制跳空的 D2，預先登記，A：2024-01 .. 2026-09** | 3,303 天、219 檔 | 0.0048 | 2.08 | **通過** |
+| E1，B：2026-10 .. 2029-09 | — | — | — | 2029-09-30 之後跑 |
+
+1. **大漲跌日的方向**：開盤前情緒偏多的大漲跌 79% 是大漲，偏空的只有 47%。但控制開盤跳空之後係數減半，大約一半是 PTT 和開盤跳空都在反應前一晚的消息；D1 不能交易，只當描述。
+2. **盤中報酬**：控制開盤跳空之後，係數完全沒變，跳空本身也不會在盤中延續。所以情緒在開盤價之外還有一點資訊，樣本外的係數也和開發期一樣。
+3. **賺不到錢**：情緒每多一個標準差，盤中報酬只多 0.10%。照情緒的正負號開盤買、收盤賣，評估期 A 的毛報酬每筆 0.033%（t = 0.71），扣掉現股當沖成本是 −0.40%，用期貨成本也是 −0.011%。
+4. **和研究一不矛盾**：研究一看的是收盤切日的每日情緒對隔天收盤報酬，這裡只看 08:30 以前的情緒、當天盤中的報酬，而且只看討論異常熱的日子。情緒會反應前一天的漲跌（相關 0.17），這點和研究一相同，回歸裡已經控制。
+5. **只適用於有人討論的股票**：大漲跌事件中，開盤前有 3 個以上帳號表達看法的只有 6%。窗口切在 08:30、討論量門檻、控制跳空都是看過開發期才定的。
+
 ## 可以往哪裡做
 
 1. **換預測目標**：最早試的是 13:30 切日的發文量預測隔天 |報酬|，在過去波動之外沒有增量
@@ -323,7 +345,8 @@ python scripts/18_large_moves_causes.py report  # 各類別比例、和人工標
    隨機部位檢定在做多日集中時會高估顯著性，改用 Newey–West t 檢定後，開發期只有 t = 1.40。
    已預先登記，目標日 2026-10-01 .. 2028-09-30；檢定力最多約 40%，沒通過只能算無法判定。
 7. **研究四接下來**：
-   - 評估期 B（2026-10 .. 2027-09）的檢定力：效果和開發期相同時約 86%，只有一半時約 39%。
+   - L1 評估期 B（2026-10 .. 2027-09）的檢定力：效果和開發期相同時約 86%，只有一半時約 39%。
+   - 開盤前情緒 E1 的評估期 B（2026-10 .. 2029-09）的檢定力：效果相同時約 74%，只有一半時約 31%；沒通過只能算無法判定。
    - 原因分類的重大訊息只有主旨。補抓全文之後，「通過季報」這類公告就看得出好壞，這也是人和 LLM 最常不一致的地方。
 
 ## 目錄
@@ -348,14 +371,16 @@ src/pttsent/
   large_moves.py      研究四：名稱比對、超額報酬與大漲跌日、時間窗則數、固定效果＋雙向 cluster 迴歸
   mops.py             公開資訊觀測站重大訊息的解析
   causes.py           研究四：大漲跌原因分類的 LLM 輸入、提示詞與輸出格式
+  direction.py        研究四：開盤前的 PTT 文字與每日情緒（漲跌方向）
 scripts/              01–06、13、14 研究一；07–10、fetch_prices.py、build_panel.py 研究二；11、12、fetch_us.py 研究三；15 2026-10 起的樣本外檢定；
-                      16、17、18、fetch_mops.py 研究四；
+                      16–20、fetch_mops.py 研究四；
                       train_classifier.py、llm_label.py 訓練情緒分類器
 tests/                時間對齊、不偷看未來、成本等不變量
 docs/
   sentiment.md        研究一的細節（文字歸屬、LLM 標註、分類器與 BERT 的準確度、回測與補充結果）
   explore_directions.md  週頻、情緒極端、超額報酬的探索計畫與結果
   large_moves.md      研究四的計畫、名稱檢查、結果、補充分析與原因分類；large_moves/ 是名稱檢查表、比對規則與原因分類的人工標註
+  large_moves_direction.md  研究四延伸：開盤前情緒與漲跌方向的探索計畫、結果與跳空檢查
   report_outline.md   專題報告大綱
-  prereg/             六份預先登記與結果：研究一、研究二、研究三、研究三的重複驗證、2026-10 起的樣本外檢定、研究四
+  prereg/             七份預先登記與結果：研究一、研究二、研究三、研究三的重複驗證、2026-10 起的樣本外檢定、研究四、研究四的開盤前情緒
 ```

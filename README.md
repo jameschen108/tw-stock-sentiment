@@ -21,9 +21,9 @@ The PTT corpus, the FinMind prices for the 267-stock universe, and the ex-rights
 | 1. Daily sentiment | Does it predict next-day returns? | **No.** Sentiment reacts to prices that have already moved; the only hint in the development period did not recur in 2024; predicting returns and going long-short on the sign fails as well | [PREREGISTRATION.md](docs/prereg/PREREGISTRATION.en.md) |
 | 2. [標的] posts | Do the long/short calls authors declare predict later returns? | **No.** Authors chase rallies; the small gap comes from continuation after limit-locked closes, and buying on bullish posts loses money after costs | [PREREGISTRATION_TARGET.md](docs/prereg/PREREGISTRATION_TARGET.en.md) |
 | 3. Pre-open discussion volume | Does discussion between the close and the next open predict that day's trading volume? | **Yes**, but the effect is small (out-of-sample MSE down 0.5-3%); passed both out-of-sample tests, 2024 and 2025-2026 | [PREREGISTRATION_VOLUME.md](docs/prereg/PREREGISTRATION_VOLUME.en.md), [replication](docs/prereg/PREREGISTRATION_VOLUME_REPLICATION.en.md) |
-| 4. Large moves | Do news and discussion show anything before a stock's large up or down days? | **Pre-open discussion signals whether the day will bring a large move** (direction unknown): after controlling for cnyes news and MOPS announcements it passed out of sample, 2024-01 to 2026-09 (t = 4.61). LLM attribution (κ = 0.63 against hand labels) finds no cause in the surrounding week's news and announcements for over half of large moves; identified causes are mostly industry themes, earnings and company events; moves without news show no clear reversal afterwards | [PREREGISTRATION_LARGE_MOVES.md](docs/prereg/PREREGISTRATION_LARGE_MOVES.md) (Chinese only) |
+| 4. Large moves | Do news and discussion show anything before a stock's large up or down days? | **Pre-open discussion signals whether the day will bring a large move** (direction unknown): after controlling for cnyes news and MOPS announcements it passed out of sample, 2024-01 to 2026-09 (t = 4.61). LLM attribution (κ = 0.63 against hand labels) finds no cause in the surrounding week's news and announcements for over half of large moves; identified causes are mostly industry themes, earnings and company events; moves without news show no clear reversal afterwards. **Pre-open sentiment slightly predicts the intraday direction**: passed out of sample, 2024-01 to 2026-09 (t = 2.08), but the effect is too small to survive trading costs | [PREREGISTRATION_LARGE_MOVES.md](docs/prereg/PREREGISTRATION_LARGE_MOVES.md), [PREREGISTRATION_DIRECTION.md](docs/prereg/PREREGISTRATION_DIRECTION.md) (Chinese only) |
 
-PTT reflects prices that have already moved, but it does signal whether the day will be busier than usual and whether a large move is coming, though not which way.
+PTT reflects prices that have already moved, but pre-open discussion does signal whether the day will be busier than usual and whether a large move is coming; pre-open sentiment also hints at the intraday direction, though too weakly to make money.
 Details for study 1 are in [docs/sentiment.md](docs/sentiment.en.md), for studies 2 and 3 in their [preregistration documents](docs/prereg/), and for study 4 in [docs/large_moves.md](docs/large_moves.md) (Chinese only for now). The documents under `docs/` are written in Chinese; the `.en.md` files are English translations added later, and the Chinese originals are the registered versions.
 
 ## Terms
@@ -106,6 +106,11 @@ python scripts/17_large_moves_prereg.py final B # 2026-10 to 2027-09: run once a
 python scripts/18_large_moves_causes.py build   # cause classification: build LLM inputs, samples and the hand-labelling sheet (no cost)
 python scripts/18_large_moves_causes.py submit --effort low   # send to the Batches API, about $9 (run once already); then status, collect
 python scripts/18_large_moves_causes.py report  # category shares, agreement and κ against hand labels
+python scripts/19_large_moves_direction.py texts     # pre-open sentiment: extract pre-open PTT texts (docs/large_moves_direction.md)
+python scripts/19_large_moves_direction.py score     # BERT scoring, about 1 hour on an Apple GPU
+python scripts/19_large_moves_direction.py analyze   # development-period D1, D2 (run once already; do not rerun); gapcheck is the post-hoc opening-gap check
+python scripts/20_direction_prereg.py final A        # out-of-sample test, 2024-01 to 2026-09 (run once already; do not rerun); score A and check A come first
+python scripts/20_direction_prereg.py final B        # 2026-10 to 2029-09: run once after the period ends and the data is complete
 ```
 
 - Steps 2-5 and 13 accept `--ticker` and `--method` (`lexicon` / `classifier_weak` / `classifier_llm` / `classifier_llm_pooled` / `classifier_bert`).
@@ -122,7 +127,7 @@ python scripts/18_large_moves_causes.py report  # category shares, agreement and
 - Validation: development and final test periods are kept separate. I commit the hypotheses, thresholds and test code first, run the final test once, and record the result whichever way it goes.
   The hypotheses of studies 1-3 have used up 2024 and 2025-01 to 2026-09.
   Study 4 is a new hypothesis, so its out-of-sample test uses 2024-01 to 2026-09, which it had not touched; study 3 had already looked at a closely related relationship over the same period, and the preregistration says so.
-  Data from 2026-10 onward is preregistered for a third study 3 test, the 2317 intraday signal ([PREREGISTRATION_2026.md](docs/prereg/PREREGISTRATION_2026.en.md)), and the study 4 replication ([PREREGISTRATION_LARGE_MOVES.md](docs/prereg/PREREGISTRATION_LARGE_MOVES.md)).
+  Data from 2026-10 onward is preregistered for a third study 3 test, the 2317 intraday signal ([PREREGISTRATION_2026.md](docs/prereg/PREREGISTRATION_2026.en.md)), the study 4 replication ([PREREGISTRATION_LARGE_MOVES.md](docs/prereg/PREREGISTRATION_LARGE_MOVES.md)), and the pre-open sentiment replication ([PREREGISTRATION_DIRECTION.md](docs/prereg/PREREGISTRATION_DIRECTION.md), through 2029-09).
 
 ## Study 1: daily sentiment and next-day returns
 
@@ -319,6 +324,23 @@ Before seeing any answers I hand-labelled 100 events: 72% agreement, κ = 0.63, 
 3. Causes are mostly public before the open: 70% of identified causes appear before the open. Over 80% of earnings and company-event causes are announcements from the night before; a third of industry themes appear intraday, and 40% of analyst reports come after the close, which looks like explanation after the fact.
 4. Monthly revenue is only 2%, which may be a data limit: monthly revenue filings are not MOPS material announcements, so only those that made a cnyes headline are visible.
 
+Pre-open sentiment and direction ([docs/large_moves_direction.md](docs/large_moves_direction.md), Chinese only): discussion volume only says whether a large move is coming, so this asks whether the sentiment of the same posts says which way.
+PTT texts mentioning the stock from the previous close to 08:30 are scored with study 1's BERT classifier and averaged by account; days with fewer than 3 accounts expressing a view are left out.
+
+| Test | Sample | Coefficient | t | Verdict |
+|---|---|---|---|---|
+| D1 pre-open sentiment → large up vs down (development) | 233 large-move events | 0.650 | 5.79 | Passed (BH) |
+| D2 pre-open sentiment → open-to-close return, on days with pre-open discussion at least 2.7× normal (development) | 6,067 days | 0.0047 | 2.78 | Passed (BH) |
+| Post hoc: D2 controlling for the opening gap (development) | 6,067 days | 0.0048 | 2.86 | — |
+| **E1 = D2 with the gap control, preregistered, A: 2024-01 to 2026-09** | 3,303 days, 219 stocks | 0.0048 | 2.08 | **Passed** |
+| E1, B: 2026-10 to 2029-09 | — | — | — | runs after 2029-09-30 |
+
+1. Direction of large moves: 79% of large moves with bullish pre-open sentiment were up, against 47% with bearish sentiment. Controlling for the opening gap halves the coefficient, so about half of it is PTT and the gap both reacting to the previous night's news. D1 cannot be traded and is descriptive only.
+2. Intraday returns: controlling for the opening gap leaves the coefficient unchanged, and the gap itself does not continue intraday. So sentiment carries a little information beyond the opening price, and the out-of-sample coefficient matches development.
+3. No money in it. One standard deviation of sentiment adds only 0.10% to the intraday return. Trading the sign of sentiment from open to close earns 0.033% gross per trade in period A (t = 0.71): −0.40% after stock day-trade costs and −0.011% with futures costs.
+4. No conflict with study 1, which used daily sentiment cut at the close to predict the next day's close-to-close return. Here only sentiment before 08:30 is used, the return is that day's open to close, and only days with unusually heavy discussion count. Sentiment does react to the previous day's move (correlation 0.17), as in study 1, and the regression controls for it.
+5. It applies only to stocks people discuss: just 6% of large-move events have 3 or more accounts expressing a pre-open view. The 08:30 cutoff, the discussion threshold and the gap control were all chosen after seeing the development period.
+
 ## Next steps
 
 1. Change the target. My first attempt used post counts cut at 13:30 to predict the next day's |return|, and it added nothing beyond past volatility
@@ -338,7 +360,8 @@ Before seeing any answers I hand-labelled 100 events: 72% agreement, κ = 0.63, 
    The random-position test overstates significance when long days cluster; with a Newey-West t test instead, the development period gives only t = 1.40.
    It is preregistered for target dates 2026-10-01 to 2028-09-30; power is at most about 40%, so a failure would only count as inconclusive.
 7. Study 4 from here:
-   - Power for period B (2026-10 to 2027-09) is about 86% if the effect matches the development period and about 39% at half that.
+   - Power for L1's period B (2026-10 to 2027-09) is about 86% if the effect matches the development period and about 39% at half that.
+   - Power for pre-open sentiment E1's period B (2026-10 to 2029-09) is about 74% at the development effect and about 31% at half; a failure would only count as inconclusive.
    - The cause classification only has MOPS subject lines. With the full announcement text, filings such as "board approved the quarterly report" would show whether the news was good or bad, which is where the LLM and I disagreed most.
 
 ## Layout
@@ -363,14 +386,16 @@ src/pttsent/
   large_moves.py      study 4: name matching, abnormal returns and large-move days, window counts, fixed-effects regressions with two-way clustering
   mops.py             parsing MOPS material announcements
   causes.py           study 4: LLM inputs, prompt and output schema for classifying the causes of large moves
+  direction.py        study 4: pre-open PTT texts and daily sentiment (direction)
 scripts/              01–06, 13, 14 study 1; 07–10, fetch_prices.py, build_panel.py study 2; 11, 12, fetch_us.py study 3; 15 out-of-sample tests from 2026-10;
-                      16, 17, 18, fetch_mops.py study 4;
+                      16-20, fetch_mops.py study 4;
                       train_classifier.py, llm_label.py train the sentiment classifiers
 tests/                invariants: time alignment, no look-ahead, costs
 docs/                 Chinese originals, with English translations in *.en.md
   sentiment.md        study 1 details (text attribution, LLM labelling, classifier and BERT accuracy, backtests and extra results)
   explore_directions.md  plan and results for weekly, extreme-sentiment and excess-return exploration
   large_moves.md      study 4 plan, name check, results, supplementary analysis and cause classification (Chinese only for now); large_moves/ holds the name check sheets, matching rules and hand labels for the cause classification
+  large_moves_direction.md  study 4 extension: plan, results and opening-gap check for pre-open sentiment and direction (Chinese only for now)
   report_outline.md   capstone report outline (Chinese only)
-  prereg/             six preregistrations with results: studies 1, 2, 3, the study 3 replication, the out-of-sample tests from 2026-10, and study 4
+  prereg/             seven preregistrations with results: studies 1, 2, 3, the study 3 replication, the out-of-sample tests from 2026-10, study 4, and study 4's pre-open sentiment
 ```
