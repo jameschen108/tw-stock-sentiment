@@ -35,3 +35,25 @@ def test_check_covers_suspended_days():
     ret.loc[D[4]] = 0.05
     bad = etf.check_vs_index(ret, idx, mult=2, tol=0.001)
     assert list(bad.index) == [D[4]] and bad["days"].iloc[0] == 1
+
+
+def test_tx_rolls_before_expiry():
+    # 契約 A 在 D[2] 到期（當天結算價 0）；D[2] 的報酬要用 B，不能用 A 的最後結算
+    tx = pd.DataFrame({
+        "date": [D[0], D[0], D[1], D[1], D[2], D[2], D[3]],
+        "contract": ["A", "B", "A", "B", "A", "B", "B"],
+        "settle": [100, 101, 110, 111, 0, 122, 122],
+        "close": [100, 101, 110, 111, 120, 122, 122]})
+    r = etf.tx_returns(tx)
+    assert np.isclose(r[D[1]], np.log(110 / 100))     # D[1] 還沒到期，用近月 A
+    assert np.isclose(r[D[2]], np.log(122 / 111))     # 到期前一天收盤換到 B
+    assert np.isclose(r[D[3]], 0.0)
+
+
+def test_synthetic_2x_uses_previous_rate_and_calendar_days():
+    fut = pd.Series([np.nan, np.log(1.01), np.log(0.98)], index=D[[1, 2, 3]])   # D[1]→D[2] 跨週末 3 天
+    rate = pd.Series([3.65, 100.0], index=pd.to_datetime(["2000-01-01", "2025-01-06"]))
+    s = etf.synthetic_2x(fut, rate, cost=0.365)
+    # D[2]：利率用前一天（3.65%），3 天；D[3]：利率用 D[2] 當天調整後的 100%，1 天
+    assert np.isclose(s[D[2]], np.log1p(0.0365 * 3 / 365 + 0.02 - 0.365 * 3 / 365))
+    assert np.isclose(s[D[3]], np.log1p(1.0 / 365 - 0.04 - 0.365 / 365))
