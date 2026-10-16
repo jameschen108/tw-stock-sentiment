@@ -30,6 +30,46 @@ def cost_model(cfg, instrument: str = "stock", daytrade: bool = False):
     raise ValueError(instrument)
 
 
+def etf_costs(cfg):
+    """ETF 的 (買進成本, 賣出成本)：手續費同股票，證交稅 0.1%。"""
+    fee = cfg["costs"]["fee_rate"] * cfg["costs"]["fee_discount"]
+    return fee, fee + cfg["costs"]["etf_tax_rate"]
+
+
+def weights_backtest(ret_next: pd.DataFrame, weights: pd.DataFrame, buy_cost: float, sell_cost: float,
+                     band: float = 0.0, tradable: pd.DataFrame | None = None) -> pd.DataFrame:
+    """多資產、只做多的權重回測（研究五）。欄位格式同 backtest()，可以直接丟給 summary()。
+
+    ret_next[t, a]：資產 a 從 t 收盤到 t+1 收盤的對數報酬；缺值（停牌）當作 0。
+    weights[t]：t 收盤決定的目標權重，t+1 生效；整列缺值 = 這天不調整。權重加總小於 1 的部分是現金，報酬 0。
+    沒有調整的日子，權重跟著價格漂移。只有在某個資產偏離目標超過 band 時才調整，而且一次調回目標。
+    調整只對買賣的金額付成本（占當天淨值的比例）。tradable[t, a] 是 False 時（例如停牌）延到下次再調。
+    """
+    assets = list(weights.columns)
+    R = np.expm1(ret_next.reindex(index=weights.index, columns=assets).fillna(0.0).to_numpy())
+    W = weights.to_numpy(dtype=float)
+    ok = (np.ones_like(W, dtype=bool) if tradable is None
+          else tradable.reindex(index=weights.index, columns=assets).fillna(False).to_numpy(dtype=bool))
+    held = np.zeros(len(assets))
+    rows = []
+    for t in range(len(W)):
+        target, cost, trade = W[t], 0.0, False
+        if not np.isnan(target).all():
+            target = np.nan_to_num(target)
+            diff = target - held
+            if np.abs(diff).max() > band + 1e-12 and ok[t][np.abs(diff) > 1e-12].all():
+                cost = diff.clip(min=0).sum() * buy_cost + (-diff).clip(min=0).sum() * sell_cost
+                held, trade = target, True
+        gross = float(held @ R[t])
+        rows.append((held.sum(), gross, cost, (1 - cost) * (1 + gross) - 1, trade, *held))
+        grown = held * (1 + R[t])
+        held = grown / (1 + gross) if 1 + gross > 0 else np.zeros(len(assets))
+    bt = pd.DataFrame(rows, index=weights.index,
+                      columns=["position", "gross", "cost", "net", "trade", *[f"w_{a}" for a in assets]])
+    bt["equity"] = (1 + bt["net"]).cumprod()
+    return bt
+
+
 def signal_position(signal: pd.Series, band: float = 0.0, long_only: bool = False,
                     hold: bool = False) -> pd.Series:
     """signal > band 做多、< -band 放空，其餘空手；hold=True 時其餘維持前一天的部位。

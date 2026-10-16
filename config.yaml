@@ -38,6 +38,7 @@ costs:
   fee_rate: 0.001425
   fee_discount: 1.0              # 券商手續費折扣，例如 0.28 = 2.8 折
   tax_rate: 0.003                # 賣出證交稅（現股）
+  etf_tax_rate: 0.001            # 賣出證交稅（ETF，研究五）
   daytrade_tax_rate: 0.0015      # 現股當沖證交稅減半；target=open_to_close 時每天都是一次當沖
   short_fee_rate: 0.0008         # 融券借券費（賣出金額的 0.08%）；收盤到收盤放空才有
   futures:                       # 個股期貨：以現股報酬近似，忽略基差
