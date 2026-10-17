@@ -3,8 +3,9 @@
     python scripts/21_leverage.py dev        # 開發期 2003–2023
     python scripts/21_leverage.py power      # 檢定力：只用開發期的 t 值
     python scripts/21_leverage.py check A    # 只檢查資料涵蓋（交易日、缺值、異常日的日期），不算報酬
-    python scripts/21_leverage.py final A    # 2024-01-01 .. 2026-09-24，只跑一次
-    python scripts/21_leverage.py final B    # 2026-10-01 .. 2029-09-30，期間結束、資料補齊後只跑一次
+    python scripts/21_leverage.py final A    # 2024-01-01 .. 2026-09-24，只跑一次（2026-10-17 已跑過）
+
+評估期 B（2026-10 .. 2029-09）在 2026-10-17 由使用者決定取消，見登記文件的修改紀錄。
 
 主要假設 H1：C2 的每日對數超額報酬（策略 − TAIEX TR）平均 > 0，Newey-West t（20 期），單尾 α = 0.05。
 次要 H2：C1、C3 同樣的檢定，兩個一起做 Holm 校正。
@@ -35,7 +36,7 @@ DEPS = ["src/pttsent/leverage.py", "src/pttsent/etf.py", "src/pttsent/backtest.p
 PERIODS = {"2003–2023": ("2003-01-02", "2023-12-31"),
            "2003–2014 合成": ("2003-01-02", "2014-12-31"),
            "2015–2023 實際 ETF": ("2015-01-06", "2023-12-31")}
-FINAL = {"A": ("2024-01-01", "2026-09-24"), "B": ("2026-10-01", "2029-09-30")}
+FINAL = {"A": ("2024-01-01", "2026-09-24")}
 REGISTERED = ["docs/prereg/PREREGISTRATION_LEVERAGE.md", "scripts/21_leverage.py", *DEPS]
 COSTS = {"fee_rate": 0.001425, "fee_discount": 1.0, "etf_tax_rate": 0.001}   # 登記時的 config.yaml
 ALPHA, NW_LAGS = 0.05, 20
@@ -195,7 +196,7 @@ def main():
     ap.add_argument("period", nargs="?", choices=list(FINAL))
     a = ap.parse_args()
     if a.cmd in ("check", "final") and not a.period:
-        ap.error("check / final 要指定 A 或 B")
+        ap.error("check / final 要指定 A")
     cfg = load_config()
     if a.cmd == "dev":
         cmd_dev(cfg)
