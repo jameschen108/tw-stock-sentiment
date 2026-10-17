@@ -46,3 +46,9 @@ def test_c3_holds_2x_above_moving_average():
 def test_bootstrap_win_extremes():
     assert lv.bootstrap_win(pd.Series(np.full(500, 0.001)), horizon=100, reps=200) == 1.0
     assert lv.bootstrap_win(pd.Series(np.full(500, -0.001)), horizon=100, reps=200) == 0.0
+
+
+def test_holm_steps_down_and_stops():
+    assert lv.holm({"C1": 0.02, "C3": 0.04}) == {"C1": True, "C3": True}     # 0.02 < 0.025、0.04 < 0.05
+    assert lv.holm({"C1": 0.03, "C3": 0.04}) == {"C1": False, "C3": False}   # 第一個就沒過，後面都不過
+    assert lv.holm({"C1": 0.001, "C3": 0.06}) == {"C1": True, "C3": False}

@@ -120,6 +120,15 @@ def evaluate(net: pd.Series, bench: pd.Series, nw_lags: int = 20) -> dict:
     }
 
 
+def holm(pvals: dict[str, float], alpha: float = 0.05) -> dict[str, bool]:
+    """Holm 逐步校正：p 由小到大，第 k 個（從 0 起）和 alpha / (m − k) 比，第一個沒過之後全部不過。"""
+    out, m, ok = {}, len(pvals), True
+    for k, (name, p) in enumerate(sorted(pvals.items(), key=lambda kv: kv[1])):
+        ok = ok and p < alpha / (m - k)
+        out[name] = ok
+    return out
+
+
 def bootstrap_win(excess: pd.Series, horizon: int = 3 * DAYS_PER_YEAR, block: int = 60,
                   reps: int = 5000, seed: int = 0) -> float:
     """stationary block bootstrap（平均區塊 60 天）：horizon 天內累積超額對數報酬 > 0 的機率。
