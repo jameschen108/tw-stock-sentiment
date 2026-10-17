@@ -20,9 +20,11 @@
 | 二、[標的] 文 | 作者自標的多空能預測之後的報酬嗎？ | **不能**。作者在追漲，小差距來自漲跌停鎖住的延續，跟著看多文買扣成本後賠錢 | [PREREGISTRATION_TARGET.md](docs/prereg/PREREGISTRATION_TARGET.md) |
 | 三、開盤前討論量 | 收盤後到開盤前的討論量能預測當天成交量嗎？ | **能**，但效果小（樣本外 MSE 降 0.5–3%）；2024 與 2025–2026 兩次樣本外檢定都通過 | [PREREGISTRATION_VOLUME.md](docs/prereg/PREREGISTRATION_VOLUME.md)、[重複驗證](docs/prereg/PREREGISTRATION_VOLUME_REPLICATION.md) |
 | 四、大漲跌日 | 個股大漲大跌之前，新聞與討論有沒有跡象？ | **開盤前的討論量能預告當天會不會大漲跌**（不分方向）：扣掉鉅亨新聞與重大訊息後，2024-01 到 2026-09 樣本外通過（t = 4.61）。用 LLM 歸因（人工驗證 κ = 0.63），過半的大漲跌在前後一週的新聞與公告裡找不到原因；找得到的多是產業題材、財報與公司事件；沒新聞的大漲跌之後沒有明顯反轉。**開盤前的情緒能稍微預告盤中方向**：2024-01 到 2026-09 樣本外通過（t = 2.08），但效果小到扣掉成本就沒了 | [PREREGISTRATION_LARGE_MOVES.md](docs/prereg/PREREGISTRATION_LARGE_MOVES.md)、[PREREGISTRATION_DIRECTION.md](docs/prereg/PREREGISTRATION_DIRECTION.md) |
+| 五、槓桿 ETF（和 PTT 無關） | 用 0050 與 00631L 放大曝險，扣成本後的總報酬能贏過大盤嗎？ | **事先定的主要規則（波動目標）沒有顯著贏**：2024-01 到 2026-09 總報酬 +280% 對大盤 +187%，但 t = 1.39；固定 1.5 倍與 200 日均線通過了，但這段大盤走勢事先已知是大多頭，只持有 0050 也顯著贏。開發期最大回檔 −67% 到 −73% | [PREREGISTRATION_LEVERAGE.md](docs/prereg/PREREGISTRATION_LEVERAGE.md) |
 
 PTT 反映的是已經發生的價格，但開盤前的討論能預告當天會不會比較熱、會不會大漲跌；開盤前的情緒還能稍微預告盤中的方向，只是效果小到賺不到錢。
-研究一的細節在 [docs/sentiment.md](docs/sentiment.md)，研究二、三的細節在各自的[預先登記文件](docs/prereg/)，研究四在 [docs/large_moves.md](docs/large_moves.md)。
+研究五換一個問題：不找訊號，只放大市場曝險；三年的評估期太短，主要規則沒有顯著贏，槓桿的回檔則照樣出現。
+研究一的細節在 [docs/sentiment.md](docs/sentiment.md)，研究二、三、五的細節在各自的[預先登記文件](docs/prereg/)，研究四在 [docs/large_moves.md](docs/large_moves.md)。
 
 ## 資料
 
@@ -96,6 +98,13 @@ python scripts/19_large_moves_direction.py score     # BERT 打分數，Apple GP
 python scripts/19_large_moves_direction.py analyze   # 開發期 D1、D2（已跑過，不要再跑）；gapcheck 是控制開盤跳空的事後檢查
 python scripts/20_direction_prereg.py final A        # 2024-01 .. 2026-09 樣本外檢定（已跑過，不要再跑）；之前要先 score A、check A
 python scripts/20_direction_prereg.py final B        # 2026-10 .. 2029-09：期間結束、資料補齊後跑一次
+
+# 研究五：槓桿 ETF（PREREGISTRATION_LEVERAGE.md）
+python scripts/fetch_long_history.py      # 台指期 1998 起、報酬指數 2003 起、價格指數 1999 起、央行利率，約 35 分鐘
+python scripts/21_leverage.py dev         # 開發期 2003–2023 的 C0–C3（會覆寫 output/leverage/dev_meta.json）
+python scripts/21_leverage.py power       # 檢定力（只用開發期的 t 值）
+python scripts/21_leverage.py final A     # 2024-01 .. 2026-09 樣本外檢定（已跑過，不要再跑）；之前要先 check A
+python scripts/21_leverage.py final B     # 2026-10 .. 2029-09：期間結束、資料補齊後跑一次
 ```
 
 - 步驟 2–5 與 13 可加 `--ticker`、`--method`（`lexicon` / `classifier_weak` / `classifier_llm` / `classifier_llm_pooled` / `classifier_bert`）；
@@ -113,6 +122,7 @@ python scripts/20_direction_prereg.py final B        # 2026-10 .. 2029-09：期�
   研究一到三的假設已經用掉 2024 與 2025-01 .. 2026-09。
   研究四是新的假設，它的樣本外檢定用 2024-01 .. 2026-09，因為這個假設在這段期間沒用過；但研究三已經在同一段期間看過相近的關係，登記文件裡有寫明。
   2026-10 起的資料已經預先登記給研究三的第三次驗證、2317 盤中訊號（[PREREGISTRATION_2026.md](docs/prereg/PREREGISTRATION_2026.md)），研究四的重現（[PREREGISTRATION_LARGE_MOVES.md](docs/prereg/PREREGISTRATION_LARGE_MOVES.md)），以及開盤前情緒的重現（[PREREGISTRATION_DIRECTION.md](docs/prereg/PREREGISTRATION_DIRECTION.md)，到 2029-09）。
+  研究五和 PTT 無關，評估期 A 也用 2024-01 .. 2026-09；這段的大盤走勢在登記前已經看過，登記文件裡有寫明。B 是 2026-10 .. 2029-09。
 
 ## 研究一：每日情緒 → 隔天報酬
 
@@ -326,6 +336,32 @@ python scripts/20_direction_prereg.py final B        # 2026-10 .. 2029-09：期�
 4. **和研究一不矛盾**：研究一看的是收盤切日的每日情緒對隔天收盤報酬，這裡只看 08:30 以前的情緒、當天盤中的報酬，而且只看討論異常熱的日子。情緒會反應前一天的漲跌（相關 0.17），這點和研究一相同，回歸裡已經控制。
 5. **只適用於有人討論的股票**：大漲跌事件中，開盤前有 3 個以上帳號表達看法的只有 6%。窗口切在 08:30、討論量門檻、控制跳空都是看過開發期才定的。
 
+## 研究五：用槓桿 ETF 打贏大盤的總報酬
+
+研究一到四都在找 PTT 的方向訊號，扣掉成本後都賺不到錢。研究五換一個問題，和 PTT 無關：不找訊號，只放大市場曝險、再管控波動拖累，看扣掉成本後的含息總報酬能不能贏過 TAIEX 報酬指數。
+只用現股與 ETF（0050、00631L），不用期貨、選擇權與融資。這是研究，不是投資建議。
+
+- **資料**：
+  - 面板的 10.5% 過濾會把 2 倍 ETF 的大跌、大漲日刪掉（00631L 有 17 天），所以 `etf.py` 從收盤與基準價重算；0050（2025-06 一拆四）與 00631L（2026-03 一拆二十二）的分割照公告還原。
+  - 2015 年以前沒有 00631L，用台指期（1998 年起）合成，年成本只用 2015–2023 校準（2.55%）。
+    用現貨價格指數合成會每年少算約 8%（沒有股息）。另外 2 倍 ETF 在大跌日會比 2 倍現貨跌得多，因為它持有的期貨 13:45 才結算。
+- **候選策略**（看開發期結果之前寫死）：C0 只持有 0050；C1 固定 50% 00631L + 50% 0050，每月調回；
+  **C2（主要假設）** 依過去 60 天的波動調整槓桿（1 到 2 倍），每週檢查；C3 在 200 日均線之上持有 00631L，之下持有 0050。
+- **檢定**：每日對數超額報酬（策略 − TAIEX TR）的平均 > 0，Newey-West t，單尾 α = 0.05；C1、C3 是次要假設，用 Holm 校正。
+
+| | 開發期 2003–2023 年化超額 | 開發期 t | 開發期最大回檔 | A：2024-01 .. 2026-09 總報酬 | A 的 t | A 判定 |
+|---|---|---|---|---|---|---|
+| TAIEX TR | — | — | −56% | +187% | — | — |
+| C0（對照） | −0.3% | −0.48 | −56% | +255% | 2.81 | 不是假設 |
+| **C2** | +4.4% | 1.40 | −67% | +280% | 1.39 | **未通過** |
+| C1 | +5.1% | 1.90 | −73% | +354% | 2.09 | 通過（Holm） |
+| C3 | +3.9% | 0.97 | −72% | +496% | 2.22 | 通過（Holm） |
+
+1. **主要假設 C2 在開發期和 A 都不顯著**：突發崩盤之前通常很平靜，C2 常是滿 2 倍進場；波動拉高後才降槓桿，之後的反彈只拿到 1 倍。
+2. **A 的結果證據力弱**：A 的大盤走勢在登記前已經看過，三年漲了 187%，2 倍曝險在這種多頭本來就會贏。只持有 0050 的 C0 也顯著贏，因為 0050 和 00631L 都偏重台積電。
+3. **槓桿的代價**：開發期的最大回檔是 −67% 到 −73%；合成的 2 倍 ETF 在 2000 年跌 76%、2008 年跌 70%。1999–2002 只有價格指數，四個策略都輸給大盤。
+4. **3 年太短**：C2 在 3 年內的檢定力只有約 13%。B（2026-10 .. 2029-09）沒通過也只能算無法判定。
+
 ## 可以往哪裡做
 
 1. **換預測目標**：最早試的是 13:30 切日的發文量預測隔天 |報酬|，在過去波動之外沒有增量
@@ -348,6 +384,7 @@ python scripts/20_direction_prereg.py final B        # 2026-10 .. 2029-09：期�
    - L1 評估期 B（2026-10 .. 2027-09）的檢定力：效果和開發期相同時約 86%，只有一半時約 39%。
    - 開盤前情緒 E1 的評估期 B（2026-10 .. 2029-09）的檢定力：效果相同時約 74%，只有一半時約 31%；沒通過只能算無法判定。
    - 原因分類的重大訊息只有主旨。補抓全文之後，「通過季報」這類公告就看得出好壞，這也是人和 LLM 最常不一致的地方。
+8. **研究五接下來**：評估期 B（2026-10 .. 2029-09）期間結束、資料補齊後跑一次；檢定力約 13%。要真的分辨槓桿策略和大盤，需要比 3 年長很多的樣本外期間。
 
 ## 目錄
 
@@ -373,8 +410,10 @@ src/pttsent/
   mops.py             公開資訊觀測站重大訊息的解析
   causes.py           研究四：大漲跌原因分類的 LLM 輸入、提示詞與輸出格式
   direction.py        研究四：開盤前的 PTT 文字與每日情緒（漲跌方向）
+  etf.py              研究五：ETF 報酬（不過濾、分割還原）、台指期連續近月、合成 2 倍、指數與央行利率
+  leverage.py         研究五：候選策略 C0–C3、評估指標、block bootstrap、Holm 校正
 scripts/              01–06、13、14 研究一；07–10、fetch_prices.py、build_panel.py 研究二；11、12、fetch_us.py 研究三；15 2026-10 起的樣本外檢定；
-                      16–20、fetch_mops.py 研究四；
+                      16–20、fetch_mops.py 研究四；21、fetch_long_history.py 研究五；
                       train_classifier.py、llm_label.py 訓練情緒分類器
 tests/                時間對齊、不偷看未來、成本等不變量
 docs/
@@ -383,7 +422,8 @@ docs/
   large_moves.md      研究四的計畫、名稱檢查、結果、補充分析與原因分類；large_moves/ 是名稱檢查表、比對規則與原因分類的人工標註
   large_moves_direction.md  研究四延伸：開盤前情緒與漲跌方向的探索計畫、結果與跳空檢查
   report_outline.md   專題報告大綱
-  prereg/             七份預先登記與結果：研究一、研究二、研究三、研究三的重複驗證、2026-10 起的樣本外檢定、研究四、研究四的開盤前情緒
+  leverage/           研究五：ETF 分割表（附公告來源）
+  prereg/             八份預先登記與結果：研究一、研究二、研究三、研究三的重複驗證、2026-10 起的樣本外檢定、研究四、研究四的開盤前情緒、研究五
 ```
 
 ---
@@ -410,8 +450,10 @@ The PTT corpus, the FinMind prices for the 267-stock universe, and the ex-rights
 | 2. [標的] posts | Do the long/short calls authors declare predict later returns? | **No.** Authors chase rallies; the small gap comes from continuation after limit-locked closes, and buying on bullish posts loses money after costs | [PREREGISTRATION_TARGET.md](docs/prereg/PREREGISTRATION_TARGET.en.md) |
 | 3. Pre-open discussion volume | Does discussion between the close and the next open predict that day's trading volume? | **Yes**, but the effect is small (out-of-sample MSE down 0.5-3%); passed both out-of-sample tests, 2024 and 2025-2026 | [PREREGISTRATION_VOLUME.md](docs/prereg/PREREGISTRATION_VOLUME.en.md), [replication](docs/prereg/PREREGISTRATION_VOLUME_REPLICATION.en.md) |
 | 4. Large moves | Do news and discussion show anything before a stock's large up or down days? | **Pre-open discussion signals whether the day will bring a large move** (direction unknown): after controlling for cnyes news and MOPS announcements it passed out of sample, 2024-01 to 2026-09 (t = 4.61). LLM attribution (κ = 0.63 against hand labels) finds no cause in the surrounding week's news and announcements for over half of large moves; identified causes are mostly industry themes, earnings and company events; moves without news show no clear reversal afterwards. **Pre-open sentiment slightly predicts the intraday direction**: passed out of sample, 2024-01 to 2026-09 (t = 2.08), but the effect is too small to survive trading costs | [PREREGISTRATION_LARGE_MOVES.md](docs/prereg/PREREGISTRATION_LARGE_MOVES.md), [PREREGISTRATION_DIRECTION.md](docs/prereg/PREREGISTRATION_DIRECTION.md) (Chinese only) |
+| 5. Leveraged ETFs (not about PTT) | Can scaling up market exposure with 0050 and 00631L beat the market's total return after costs? | **The pre-specified primary rule (volatility targeting) did not win significantly**: +280% total return in 2024-01 to 2026-09 against +187% for the market, but t = 1.39. A fixed 1.5x mix and a 200-day moving-average rule passed, but the market's path in that period was already known to be a strong bull run, and holding 0050 alone also won significantly. Development-period maximum drawdowns were −67% to −73% | [PREREGISTRATION_LEVERAGE.md](docs/prereg/PREREGISTRATION_LEVERAGE.md) (Chinese only) |
 
 PTT reflects prices that have already moved, but pre-open discussion does signal whether the day will be busier than usual and whether a large move is coming; pre-open sentiment also hints at the intraday direction, though too weakly to make money.
+Study 5 asks a different question: no signal, just more market exposure. Three years of evaluation is too short for the primary rule to win significantly, while the drawdowns from leverage showed up as expected.
 Details for study 1 are in [docs/sentiment.md](docs/sentiment.en.md), for studies 2 and 3 in their [preregistration documents](docs/prereg/), and for study 4 in [docs/large_moves.md](docs/large_moves.md) (Chinese only for now). The documents under `docs/` are written in Chinese; the `.en.md` files are English translations added later, and the Chinese originals are the registered versions.
 
 ## Terms
@@ -499,6 +541,13 @@ python scripts/19_large_moves_direction.py score     # BERT scoring, about 1 hou
 python scripts/19_large_moves_direction.py analyze   # development-period D1, D2 (run once already; do not rerun); gapcheck is the post-hoc opening-gap check
 python scripts/20_direction_prereg.py final A        # out-of-sample test, 2024-01 to 2026-09 (run once already; do not rerun); score A and check A come first
 python scripts/20_direction_prereg.py final B        # 2026-10 to 2029-09: run once after the period ends and the data is complete
+
+# Study 5: leveraged ETFs (PREREGISTRATION_LEVERAGE.md)
+python scripts/fetch_long_history.py      # TX futures from 1998, total return index from 2003, price index from 1999, central bank rate; about 35 minutes
+python scripts/21_leverage.py dev         # C0-C3 over the development period 2003-2023 (overwrites output/leverage/dev_meta.json)
+python scripts/21_leverage.py power       # power (development-period t values only)
+python scripts/21_leverage.py final A     # out-of-sample test, 2024-01 to 2026-09 (run once already; do not rerun); check A comes first
+python scripts/21_leverage.py final B     # 2026-10 to 2029-09: run once after the period ends and the data is complete
 ```
 
 - Steps 2-5 and 13 accept `--ticker` and `--method` (`lexicon` / `classifier_weak` / `classifier_llm` / `classifier_llm_pooled` / `classifier_bert`).
@@ -516,6 +565,7 @@ python scripts/20_direction_prereg.py final B        # 2026-10 to 2029-09: run o
   The hypotheses of studies 1-3 have used up 2024 and 2025-01 to 2026-09.
   Study 4 is a new hypothesis, so its out-of-sample test uses 2024-01 to 2026-09, which it had not touched; study 3 had already looked at a closely related relationship over the same period, and the preregistration says so.
   Data from 2026-10 onward is preregistered for a third study 3 test, the 2317 intraday signal ([PREREGISTRATION_2026.md](docs/prereg/PREREGISTRATION_2026.en.md)), the study 4 replication ([PREREGISTRATION_LARGE_MOVES.md](docs/prereg/PREREGISTRATION_LARGE_MOVES.md)), and the pre-open sentiment replication ([PREREGISTRATION_DIRECTION.md](docs/prereg/PREREGISTRATION_DIRECTION.md), through 2029-09).
+  Study 5 does not use PTT; its period A is also 2024-01 to 2026-09. The market's path over that period was already seen before registration, and the preregistration says so. Period B is 2026-10 to 2029-09.
 
 ## Study 1: daily sentiment and next-day returns
 
@@ -729,6 +779,32 @@ PTT texts mentioning the stock from the previous close to 08:30 are scored with 
 4. No conflict with study 1, which used daily sentiment cut at the close to predict the next day's close-to-close return. Here only sentiment before 08:30 is used, the return is that day's open to close, and only days with unusually heavy discussion count. Sentiment does react to the previous day's move (correlation 0.17), as in study 1, and the regression controls for it.
 5. It applies only to stocks people discuss: just 6% of large-move events have 3 or more accounts expressing a pre-open view. The 08:30 cutoff, the discussion threshold and the gap control were all chosen after seeing the development period.
 
+## Study 5: beating the market's total return with leveraged ETFs
+
+Studies 1-4 look for a directional signal in PTT, and none of it makes money after costs. Study 5 asks a different question that has nothing to do with PTT: with no signal at all, can scaling up market exposure, while managing volatility drag, beat the TAIEX total return index after costs?
+Only stocks and ETFs (0050, 00631L); no futures, options or margin. This is research, not investment advice.
+
+- Data:
+  - The panel's 10.5% filter drops the largest up and down days of 2x ETFs (17 days for 00631L), so `etf.py` recomputes returns from closes and base prices; the 0050 split (1-for-4, 2025-06) and the 00631L split (1-for-22, 2026-03) are restored from the announcements.
+  - Before 2015 there is no 00631L, so it is synthesized from TX futures (from 1998), with its yearly cost calibrated on 2015-2023 only (2.55%).
+    Synthesizing from the spot price index would miss about 8% a year (no dividends). A 2x ETF also falls more than twice the spot index on crash days, because the futures it holds settle at 13:45.
+- Candidates, fixed before seeing the development results: C0 holds 0050 only; C1 holds a fixed 50% 00631L + 50% 0050, rebalanced monthly;
+  **C2 (primary)** sets leverage between 1x and 2x from the past 60 days' volatility, checked weekly; C3 holds 00631L above the 200-day moving average and 0050 below it.
+- Test: mean daily log excess return (strategy − TAIEX TR) > 0, Newey-West t, one-sided α = 0.05; C1 and C3 are secondary, with Holm correction.
+
+| | Dev 2003-2023 annual excess | Dev t | Dev max drawdown | A: 2024-01 to 2026-09 total return | A t | A verdict |
+|---|---|---|---|---|---|---|
+| TAIEX TR | — | — | −56% | +187% | — | — |
+| C0 (reference) | −0.3% | −0.48 | −56% | +255% | 2.81 | not a hypothesis |
+| **C2** | +4.4% | 1.40 | −67% | +280% | 1.39 | **failed** |
+| C1 | +5.1% | 1.90 | −73% | +354% | 2.09 | passed (Holm) |
+| C3 | +3.9% | 0.97 | −72% | +496% | 2.22 | passed (Holm) |
+
+1. The primary rule C2 was not significant in either the development period or A. Sudden crashes usually follow calm stretches, so C2 often goes in at the full 2x; it only cuts leverage after volatility jumps, and then catches the rebound at 1x.
+2. A is weak evidence. The market's path in A was seen before registration, and it rose 187% in three years; 2x exposure wins in a bull run like that anyway. C0, holding only 0050, also won significantly, because 0050 and 00631L both lean heavily on TSMC.
+3. The cost of leverage: development-period maximum drawdowns were −67% to −73%; the synthetic 2x ETF lost 76% in 2000 and 70% in 2008. In 1999-2002, with only the price index, all four strategies lost to the market.
+4. Three years is too short: C2's power over three years is only about 13%, so a failure in B (2026-10 to 2029-09) would also count as inconclusive.
+
 ## Next steps
 
 1. Change the target. My first attempt used post counts cut at 13:30 to predict the next day's |return|, and it added nothing beyond past volatility
@@ -751,6 +827,7 @@ PTT texts mentioning the stock from the previous close to 08:30 are scored with 
    - Power for L1's period B (2026-10 to 2027-09) is about 86% if the effect matches the development period and about 39% at half that.
    - Power for pre-open sentiment E1's period B (2026-10 to 2029-09) is about 74% at the development effect and about 31% at half; a failure would only count as inconclusive.
    - The cause classification only has MOPS subject lines. With the full announcement text, filings such as "board approved the quarterly report" would show whether the news was good or bad, which is where the LLM and I disagreed most.
+8. Study 5 from here: period B (2026-10 to 2029-09) runs once after it ends and the data is complete; power is about 13%. Telling a leveraged strategy apart from the market would need an out-of-sample period much longer than three years.
 
 ## Layout
 
@@ -776,8 +853,10 @@ src/pttsent/
   mops.py             parsing MOPS material announcements
   causes.py           study 4: LLM inputs, prompt and output schema for classifying the causes of large moves
   direction.py        study 4: pre-open PTT texts and daily sentiment (direction)
+  etf.py              study 5: ETF returns (no limit filter, split adjustment), continuous TX front month, synthetic 2x, indexes and central bank rate
+  leverage.py         study 5: candidate strategies C0-C3, metrics, block bootstrap, Holm correction
 scripts/              01–06, 13, 14 study 1; 07–10, fetch_prices.py, build_panel.py study 2; 11, 12, fetch_us.py study 3; 15 out-of-sample tests from 2026-10;
-                      16-20, fetch_mops.py study 4;
+                      16-20, fetch_mops.py study 4; 21, fetch_long_history.py study 5;
                       train_classifier.py, llm_label.py train the sentiment classifiers
 tests/                invariants: time alignment, no look-ahead, costs
 docs/                 Chinese originals, with English translations in *.en.md
@@ -786,5 +865,6 @@ docs/                 Chinese originals, with English translations in *.en.md
   large_moves.md      study 4 plan, name check, results, supplementary analysis and cause classification (Chinese only for now); large_moves/ holds the name check sheets, matching rules and hand labels for the cause classification
   large_moves_direction.md  study 4 extension: plan, results and opening-gap check for pre-open sentiment and direction (Chinese only for now)
   report_outline.md   capstone report outline (Chinese only)
-  prereg/             seven preregistrations with results: studies 1, 2, 3, the study 3 replication, the out-of-sample tests from 2026-10, study 4, and study 4's pre-open sentiment
+  leverage/           study 5: ETF split table (with announcement sources)
+  prereg/             eight preregistrations with results: studies 1, 2, 3, the study 3 replication, the out-of-sample tests from 2026-10, study 4, study 4's pre-open sentiment, and study 5
 ```
